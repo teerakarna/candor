@@ -60,3 +60,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `candor_enrichment_skipped_total{reason=no_llm_configured}` is now actually incremented - it was
   documented in the metric's help text since the budget-ceiling slice but never wired up.
+
+### Dev tooling
+
+- CI now imports `charts/chart/files/grafana-dashboard.json` into a real Grafana instance
+  (`grafana-dashboard` job) and checks every panel round-trips - catches the file failing to parse
+  or the import silently dropping panels. Grafana's save API doesn't validate panel/query
+  correctness, so this is a structural check, not full schema validation.
+- `hack/grafana-preview/`: a `docker compose` stack (fake metrics generator + Prometheus + Grafana,
+  both auto-provisioned) for visually checking the dashboard locally without a real cluster or
+  operator - see its README.

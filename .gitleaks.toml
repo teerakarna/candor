@@ -1,0 +1,19 @@
+# Gitleaks config for candor.
+#
+# Extends the default ruleset. This file must never disable a rule wholesale - only allowlist a
+# specific, explained, verified-safe match.
+#
+# Deliberately regexes-only, no `paths` - verified empirically (not assumed) that gitleaks' global
+# [allowlist] ORs its `paths` and `regexes` conditions, not ANDs them: adding `paths` here would
+# have suppressed every curl-auth-user finding anywhere in that file, not just this one literal
+# credential. Also verified the regex matches against the extracted Secret text ("admin:admin"),
+# not the full matched line ("curl -sf -u admin:admin ...") - hence no `-u ` prefix, and it's
+# anchored (^...$) so a lookalike like "notadmin:adminpassword123" still gets flagged.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "curl-auth-user: admin:admin against the ephemeral, localhost-only Grafana service container the grafana-dashboard CI job (.github/workflows/ci.yml) spins up and tears down within the same job run. Grafana's documented default dev credential, not a real secret."
+regexes = [
+    '''^admin:admin$''',
+]

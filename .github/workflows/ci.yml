@@ -65,3 +65,63 @@ jobs:
 
       - name: E2E tests
         run: make test-e2e
+
+  grafana-dashboard:
+    runs-on: ubuntu-latest
+    services:
+      # Pinned to an exact version, not `latest` - same discipline as the envtest-k8s-version
+      # matrix above. Grafana's own image is Alpine-based and ships both curl and wget, so the
+      # health check below runs inside the service container without extra setup.
+      grafana:
+        image: grafana/grafana:12.2.0
+        ports:
+          - 3000:3000
+        env:
+          GF_SECURITY_ADMIN_PASSWORD: admin
+        options: >-
+          --health-cmd "curl -sf http://localhost:3000/api/health"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Grafana's dashboard-save API is lenient - it does NOT reject an invalid panel type or a
+      # broken query, only structurally unimportable JSON (verified locally against a real
+      # instance before writing this job). So this catches the file failing to parse, or the
+      # import losing panels wholesale (e.g. someone truncates the file) - not query/panel-schema
+      # correctness. A datasource is registered first so the dashboard's ${DS_PROMETHEUS}
+      # datasource-template variable resolves during import.
+      - name: Register a Prometheus datasource
+        run: |
+          curl -sf -u admin:admin -X POST http://localhost:3000/api/datasources \
+            -H "Content-Type: application/json" \
+            -d '{"name":"Prometheus","type":"prometheus","url":"http://localhost:9090","access":"proxy","isDefault":true}'
+
+      - name: Import the dashboard into Grafana
+        run: |
+          python3 -c "
+          import json
+          d = json.load(open('charts/chart/files/grafana-dashboard.json'))
+          print(json.dumps({'dashboard': d, 'overwrite': True}))
+          " > /tmp/import-payload.json
+
+          response=$(curl -sf -u admin:admin -X POST http://localhost:3000/api/dashboards/db \
+            -H "Content-Type: application/json" \
+            -d @/tmp/import-payload.json)
+          echo "$response"
+
+          import_status=$(echo "$response" | jq -r '.status')
+          if [ "$import_status" != "success" ]; then
+            echo "Grafana rejected the dashboard import"
+            exit 1
+          fi
+
+      - name: Verify every panel round-tripped
+        run: |
+          got=$(curl -sf -u admin:admin http://localhost:3000/api/dashboards/uid/candor-overview | jq '.dashboard.panels | length')
+          want=$(python3 -c "import json; print(len(json.load(open('charts/chart/files/grafana-dashboard.json'))['panels']))")
+          if [ "$got" != "$want" ]; then
+            echo "panel count mismatch after import: got $got, want $want"
+            exit 1
+          fi
