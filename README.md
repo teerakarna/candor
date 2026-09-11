@@ -107,6 +107,29 @@ matters given the input is untrusted scanner data. Override the model with
 `CANDOR_LLM_MODEL` (default: `claude-sonnet-5`) via `manager.envOverrides` in the Helm chart's
 values.
 
+### Suppressing a Finding
+
+Mute a specific Finding by its exact content fingerprint:
+
+```sh
+kubectl get finding <name> -o jsonpath='{.status.fingerprint}'
+
+kubectl apply -f - <<EOF
+apiVersion: candor.dev/v1alpha1
+kind: Suppression
+metadata:
+  name: known-false-positive
+spec:
+  fingerprint: "<the fingerprint above>"
+  reason: "known false positive - tracked in TICKET-123"
+  # expiresAt: "2026-12-31T00:00:00Z"   # omit for indefinite
+EOF
+```
+
+Matching is exact by construction: if the underlying signal's content actually changes, its
+fingerprint changes too, the Suppression no longer matches, and the Finding resurfaces on its own
+- there's nothing to remember to delete or update.
+
 ## Project Distribution
 
 Two install paths, both produced by the release pipeline — nothing hand-built or committed to

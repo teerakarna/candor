@@ -21,38 +21,38 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-// SuppressionSpec defines the desired state of Suppression
+// SuppressionSpec defines the desired state of Suppression.
+//
+// A Suppression mutes exactly one Finding.status.fingerprint value - not a Finding object, not a
+// resource name. This is deliberate (docs/design.md pillar 3): a fingerprint is a hash of the
+// signal's actual content, so if the underlying state genuinely changes, the fingerprint changes
+// with it, no longer matches this Suppression, and the Finding resurfaces on its own. There is no
+// separate "resolved" or "still valid" tracking to get out of sync - matching is exact by
+// construction.
 type SuppressionSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+	// fingerprint is the exact Finding.status.fingerprint value to mute, in the Suppression's own
+	// namespace.
+	// +required
+	Fingerprint string `json:"fingerprint"`
 
-	// foo is an example field of Suppression. Edit suppression_types.go to remove/update
+	// reason is a required human justification for muting this fingerprint - suppression is never
+	// silent or unexplained.
+	// +required
+	Reason string `json:"reason"`
+
+	// expiresAt is when this Suppression stops applying. Omitted means it applies indefinitely
+	// (until deleted, or until the fingerprint itself changes).
 	// +optional
-	Foo *string `json:"foo,omitempty"`
+	ExpiresAt *metav1.Time `json:"expiresAt,omitempty"`
 }
 
 // SuppressionStatus defines the observed state of Suppression.
 type SuppressionStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// For Kubernetes API conventions, see:
-	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
-
 	// conditions represent the current state of the Suppression resource.
-	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
 	//
-	// Standard condition types include:
-	// - "Available": the resource is fully functional
-	// - "Progressing": the resource is being created or updated
-	// - "Degraded": the resource failed to reach or maintain its desired state
-	//
-	// The status of each condition is one of True, False, or Unknown.
+	// The "Expired" condition is True once expiresAt has passed - the Suppression object and its
+	// Reason are kept as an audit trail rather than deleted, so this condition is how an operator
+	// sees at a glance that it has lapsed without needing to compare timestamps by hand.
 	// +listType=map
 	// +listMapKey=type
 	// +optional
@@ -61,6 +61,10 @@ type SuppressionStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Fingerprint",type=string,JSONPath=".spec.fingerprint"
+// +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=".spec.reason"
+// +kubebuilder:printcolumn:name="ExpiresAt",type=date,JSONPath=".spec.expiresAt"
+// +kubebuilder:printcolumn:name="Expired",type=string,JSONPath=".status.conditions[?(@.type==\"Expired\")].status"
 
 // Suppression is the Schema for the suppressions API
 type Suppression struct {

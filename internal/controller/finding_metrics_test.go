@@ -26,7 +26,7 @@ func TestFindingReconciler_Metrics(t *testing.T) {
 	policy := testPolicy(1)
 	f1 := newTestFinding("f1")
 	f2 := newTestFinding("f2")
-	f2.Status.Fingerprint = "fp-2" // distinct, so it also needs enrichment
+	f2.Status.Fingerprint = testFingerprint2 // distinct, so it also needs enrichment
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(f1, f2, policy).
 		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}).Build()
 

@@ -26,6 +26,14 @@ import (
 // these tests don't need.
 const testProvider = "trivy"
 
+// testFingerprint1 and testFingerprint2 are two distinct fingerprint values shared across this
+// package's test files - a real value never needs to be anything but "some string that changed",
+// so there's no reason each file should invent its own.
+const (
+	testFingerprint1 = "fp-1"
+	testFingerprint2 = "fp-2"
+)
+
 // countingLLM is a fake llm.Client that counts calls and returns a fixed response - enough to
 // prove the gate around it, without needing a real API key or network access in CI.
 type countingLLM struct {
@@ -52,7 +60,7 @@ func newTestFinding(name string) *candorv1alpha1.Finding {
 		},
 		// Set by internal/signal.Ingest in production; set directly here since these tests
 		// exercise FindingReconciler in isolation from Ingest.
-		Status: candorv1alpha1.FindingStatus{Fingerprint: "fp-1"},
+		Status: candorv1alpha1.FindingStatus{Fingerprint: testFingerprint1},
 	}
 }
 
@@ -98,8 +106,8 @@ func TestFindingReconciler_NeedsEnrichment_CallsLLMOnce(t *testing.T) {
 	if err := c.Get(ctx, namespacedName(finding), got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Status.EnrichedFingerprint != "fp-1" {
-		t.Errorf("EnrichedFingerprint = %q, want %q", got.Status.EnrichedFingerprint, "fp-1")
+	if got.Status.EnrichedFingerprint != testFingerprint1 {
+		t.Errorf("EnrichedFingerprint = %q, want %q", got.Status.EnrichedFingerprint, testFingerprint1)
 	}
 	if len(got.Status.Hypotheses) != 1 {
 		t.Fatalf("got %d hypotheses, want 1", len(got.Status.Hypotheses))
@@ -144,7 +152,7 @@ func TestFindingReconciler_CostRegression(t *testing.T) {
 	if err := c.Get(ctx, req.NamespacedName, got); err != nil {
 		t.Fatal(err)
 	}
-	got.Status.Fingerprint = "fp-2"
+	got.Status.Fingerprint = testFingerprint2
 	if err := c.Status().Update(ctx, got); err != nil {
 		t.Fatal(err)
 	}

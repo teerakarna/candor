@@ -33,3 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `candor_signalpolicy_budget_calls_used`, `candor_signalpolicy_budget_calls_limit`) exposed on the
   existing manager metrics endpoint - proven with real metric-value assertions, and a test proving a
   budget of 2 caps real LLM calls to exactly 2 across 5 distinct Findings.
+- `Suppression` CRD: mute a Finding by its exact content fingerprint (`spec.fingerprint`), with a
+  required `spec.reason` and optional `spec.expiresAt`. Exact by construction - if the underlying
+  content actually changes, the fingerprint changes too and the Finding resurfaces on its own, no
+  separate "resolved" tracking needed. Applies before the LLM gate, so it works even with no LLM
+  configured. `FindingReconciler` now watches `Suppression` objects directly, so create/edit/delete
+  takes effect immediately rather than waiting on the next unrelated Finding event.
+
+### Fixed
+
+- `candor_enrichment_skipped_total{reason=no_llm_configured}` is now actually incremented - it was
+  documented in the metric's help text since the budget-ceiling slice but never wired up.
