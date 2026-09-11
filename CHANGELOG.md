@@ -50,6 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `grafanaDashboard.enabled` (off by default), labelled for the kube-prometheus-stack Grafana
   sidecar to auto-discover. Plots LLM calls, enrichment skipped by reason, verification
   transitions, budget usage, and the enrichment-calls-avoided ratio.
+- Generic webhook sink (`internal/notify`) + periodic digest: `SignalPolicy.spec.webhook.url`
+  (optional, one URL per namespace) drives both an immediate notification on a Finding created,
+  resolved, or recurred, and a periodic per-namespace digest (`CANDOR_DIGEST_INTERVAL`, default
+  24h) tallying Findings by verification outcome and severity. Both are best-effort - a failure is
+  logged and counted (`candor_webhook_sends_total`), never returned as an error.
 
 ### Fixed
 

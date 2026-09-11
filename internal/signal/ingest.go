@@ -12,9 +12,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
 	"github.com/teerakarna/candor/internal/metrics"
+	"github.com/teerakarna/candor/internal/notify"
 )
 
 // Result reports what Ingest did, so callers (and tests) can observe the outcome without Ingest
@@ -52,11 +54,14 @@ func Ingest(ctx context.Context, c client.Client, scheme *runtime.Scheme, sig Si
 	}
 
 	if !anyPolicyAccepts(policies.Items, sig) {
-		resolved, err := resolveIfOpen(ctx, c, sig.Namespace, findingName(sig))
+		resolvedFinding, err := resolveIfOpen(ctx, c, sig.Namespace, findingName(sig))
 		if err != nil {
 			return "", err
 		}
-		if resolved {
+		if resolvedFinding != nil {
+			if webhook := webhookFor(policies.Items, sig.Provider); webhook != nil {
+				notifyEvent(ctx, webhook.URL, notify.KindFindingResolved, resolvedFinding)
+			}
 			return ResultResolved, nil
 		}
 		return ResultFiltered, nil
@@ -108,30 +113,73 @@ func Ingest(ctx context.Context, c client.Client, scheme *runtime.Scheme, sig Si
 	}
 
 	fp := Fingerprint(sig)
-	statusChanged := false
-	if finding.Status.Fingerprint != fp {
+	fingerprintChanged := finding.Status.Fingerprint != fp
+	outcomeChanged := finding.Status.VerificationOutcome != newOutcome
+
+	if fingerprintChanged {
 		finding.Status.Fingerprint = fp
-		statusChanged = true
 	}
-	if finding.Status.VerificationOutcome != newOutcome {
+	if outcomeChanged {
 		finding.Status.VerificationOutcome = newOutcome
-		statusChanged = true
 		metrics.VerificationTransitionsTotal.WithLabelValues(verificationMetricLabel[newOutcome]).Inc()
 	}
-	if statusChanged {
+	if fingerprintChanged || outcomeChanged {
 		if err := c.Status().Update(ctx, finding); err != nil {
 			return "", fmt.Errorf("updating status on Finding %s/%s: %w", sig.Namespace, finding.Name, err)
 		}
 	}
 
+	var finalResult Result
 	switch result {
 	case controllerutil.OperationResultCreated:
-		return ResultCreated, nil
+		finalResult = ResultCreated
 	case controllerutil.OperationResultUpdated:
-		return ResultUpdated, nil
+		finalResult = ResultUpdated
 	default:
-		return ResultUnchanged, nil
+		finalResult = ResultUnchanged
 	}
+
+	// Notify on a brand new Finding, or on an existing one recurring - not on every routine
+	// content refresh (ResultUpdated with no outcome change) or unchanged reconcile, which would
+	// just be noise.
+	if webhook := webhookFor(policies.Items, sig.Provider); webhook != nil {
+		switch {
+		case finalResult == ResultCreated:
+			notifyEvent(ctx, webhook.URL, notify.KindFindingCreated, finding)
+		case outcomeChanged && newOutcome == VerificationRecurred:
+			notifyEvent(ctx, webhook.URL, notify.KindFindingRecurred, finding)
+		}
+	}
+
+	return finalResult, nil
+}
+
+// webhookFor returns the Webhook configured by the first policy in policies that enables
+// provider, or nil if none is configured. Reuses the policies slice Ingest already fetched,
+// rather than issuing a second List - the same "first policy for this provider governs shared
+// config" convention CheckBudget's caller already relies on for Budget.
+func webhookFor(policies []candorv1alpha1.SignalPolicy, provider string) *candorv1alpha1.Webhook {
+	for i := range policies {
+		if providerEnabled(policies[i].Spec.Providers, provider) && policies[i].Spec.Webhook != nil {
+			return policies[i].Spec.Webhook
+		}
+	}
+	return nil
+}
+
+// notifyEvent sends a Finding notification best-effort: a failure is logged and counted, never
+// returned as an error - a broken webhook endpoint must not make Finding reconciliation fail.
+func notifyEvent(ctx context.Context, url, kind string, f *candorv1alpha1.Finding) {
+	event := notify.Event{
+		Kind: kind, Namespace: f.Namespace, Finding: f.Name,
+		Severity: f.Spec.Severity, Summary: f.Spec.Summary,
+	}
+	if err := notify.Send(ctx, url, event); err != nil {
+		metrics.WebhookSendsTotal.WithLabelValues("error").Inc()
+		logf.FromContext(ctx).Error(err, "sending webhook notification", "kind", kind, "finding", f.Name)
+		return
+	}
+	metrics.WebhookSendsTotal.WithLabelValues("success").Inc()
 }
 
 // anyPolicyAccepts reports whether at least one SignalPolicy enables sig.Provider at a
@@ -167,30 +215,31 @@ var verificationMetricLabel = map[string]string{
 	VerificationRecurred:     "recurred",
 }
 
-// resolveIfOpen marks the Finding at namespace/name Resolved, if one exists and isn't already.
-// Called when a signal is filtered (no SignalPolicy accepts it - either none opts into this
-// provider, or its severity fell below every threshold that does), so a Finding whose underlying
-// condition has genuinely gone away doesn't sit there stale forever showing the old severity.
-// Returns false, nil as a no-op (not an error) in the common case: most filtered signals never had
-// a Finding to begin with, and a Finding already Resolved doesn't need writing again.
-func resolveIfOpen(ctx context.Context, c client.Client, namespace, name string) (bool, error) {
+// resolveIfOpen marks the Finding at namespace/name Resolved, if one exists and isn't already,
+// and returns it (for the caller to notify with) - or nil, nil as a no-op (not an error) in the
+// common case: most filtered signals never had a Finding to begin with, and a Finding already
+// Resolved doesn't need writing, or reporting, again. Called when a signal is filtered (no
+// SignalPolicy accepts it - either none opts into this provider, or its severity fell below every
+// threshold that does), so a Finding whose underlying condition has genuinely gone away doesn't
+// sit there stale forever showing the old severity.
+func resolveIfOpen(ctx context.Context, c client.Client, namespace, name string) (*candorv1alpha1.Finding, error) {
 	finding := &candorv1alpha1.Finding{}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, finding); err != nil {
 		if apierrors.IsNotFound(err) {
-			return false, nil
+			return nil, nil
 		}
-		return false, fmt.Errorf("getting Finding %s/%s: %w", namespace, name, err)
+		return nil, fmt.Errorf("getting Finding %s/%s: %w", namespace, name, err)
 	}
 	if finding.Status.VerificationOutcome == VerificationResolved {
-		return false, nil
+		return nil, nil
 	}
 
 	finding.Status.VerificationOutcome = VerificationResolved
 	if err := c.Status().Update(ctx, finding); err != nil {
-		return false, fmt.Errorf("resolving Finding %s/%s: %w", namespace, name, err)
+		return nil, fmt.Errorf("resolving Finding %s/%s: %w", namespace, name, err)
 	}
 	metrics.VerificationTransitionsTotal.WithLabelValues(verificationMetricLabel[VerificationResolved]).Inc()
-	return true, nil
+	return finding, nil
 }
 
 // findingName derives a stable Finding object name from the signal's source identity (not its

@@ -27,6 +27,9 @@ spec:
     - jsonPath: .spec.budget.maxCalls
       name: BudgetMax
       type: integer
+    - jsonPath: .spec.webhook.url
+      name: Webhook
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -97,6 +100,23 @@ spec:
                   type: string
                 minItems: 1
                 type: array
+              webhook:
+                description: |-
+                  webhook configures a generic JSON sink for this namespace - the same URL is used both for
+                  immediate notifications (a Finding created, resolved, or recurred) and the periodic digest
+                  (docs/design.md: "one code path covers Slack/Teams/PagerDuty/anything" - a single generic
+                  payload shape, not a per-vendor integration). Optional - omitted means no notifications and
+                  no digest for this namespace.
+                properties:
+                  url:
+                    description: |-
+                      url receives an HTTP POST with a JSON body on every notification and digest. Must be
+                      http:// or https:// - checked at send time (internal/notify.Send), not admission time, to
+                      keep the schema simple.
+                    type: string
+                required:
+                - url
+                type: object
             required:
             - providers
             type: object

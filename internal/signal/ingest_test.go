@@ -2,6 +2,9 @@ package signal
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -10,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
+	"github.com/teerakarna/candor/internal/notify"
 )
 
 const (
@@ -43,6 +47,29 @@ func policy(name string, providers []string, minSeverity string) *candorv1alpha1
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace},
 		Spec:       candorv1alpha1.SignalPolicySpec{Providers: providers, MinSeverity: minSeverity},
 	}
+}
+
+// webhookServer records every Event it receives (decoded, for easy assertions) and returns a
+// stop func alongside the received channel.
+func webhookServer(t *testing.T) (url string, received chan notify.Event) {
+	t.Helper()
+	received = make(chan notify.Event, 10)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var event notify.Event
+		if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
+			t.Errorf("decoding webhook body: %v", err)
+		}
+		received <- event
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+	return server.URL, received
+}
+
+func policyWithWebhook(providers []string, webhookURL string) *candorv1alpha1.SignalPolicy {
+	p := policy("policy", providers, SeverityHigh)
+	p.Spec.Webhook = &candorv1alpha1.Webhook{URL: webhookURL}
+	return p
 }
 
 func testSignal(severity string) Signal {
@@ -290,6 +317,110 @@ func TestIngest_ResolvedAgain_NoOp(t *testing.T) {
 	}
 	if result != ResultFiltered {
 		t.Errorf("result = %q, want %q (already resolved - nothing new happened)", result, ResultFiltered)
+	}
+}
+
+func TestIngest_Creates_NotifiesWebhook(t *testing.T) {
+	url, received := webhookServer(t)
+	c, scheme := newFakeClient(t, policyWithWebhook([]string{testProvider}, url))
+	sig := testSignal(SeverityCritical)
+
+	if _, err := Ingest(context.Background(), c, scheme, sig, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case event := <-received:
+		if event.Kind != notify.KindFindingCreated || event.Severity != SeverityCritical {
+			t.Errorf("event = %+v, want Kind=%q Severity=%q", event, notify.KindFindingCreated, SeverityCritical)
+		}
+	default:
+		t.Fatal("expected a FindingCreated notification")
+	}
+}
+
+func TestIngest_UpdatedWithoutOutcomeChange_NoNotification(t *testing.T) {
+	url, received := webhookServer(t)
+	c, scheme := newFakeClient(t, policyWithWebhook([]string{testProvider}, url))
+	sig := testSignal(SeverityCritical)
+	ctx := context.Background()
+
+	if _, err := Ingest(ctx, c, scheme, sig, nil); err != nil {
+		t.Fatal(err)
+	}
+	<-received // drain the FindingCreated notification from the first ingest
+
+	sig.Summary = "updated summary, same severity"
+	if _, err := Ingest(ctx, c, scheme, sig, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case event := <-received:
+		t.Fatalf("expected no notification for a routine content update, got %+v", event)
+	default:
+	}
+}
+
+func TestIngest_Resolved_NotifiesWebhook(t *testing.T) {
+	url, received := webhookServer(t)
+	c, scheme := newFakeClient(t, policyWithWebhook([]string{testProvider}, url))
+	ctx := context.Background()
+
+	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityCritical), nil); err != nil {
+		t.Fatal(err)
+	}
+	<-received // drain FindingCreated
+
+	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityLow), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case event := <-received:
+		if event.Kind != notify.KindFindingResolved {
+			t.Errorf("event.Kind = %q, want %q", event.Kind, notify.KindFindingResolved)
+		}
+	default:
+		t.Fatal("expected a FindingResolved notification")
+	}
+}
+
+func TestIngest_Recurred_NotifiesWebhook(t *testing.T) {
+	url, received := webhookServer(t)
+	c, scheme := newFakeClient(t, policyWithWebhook([]string{testProvider}, url))
+	ctx := context.Background()
+
+	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityCritical), nil); err != nil {
+		t.Fatal(err)
+	}
+	<-received // drain FindingCreated
+	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityLow), nil); err != nil {
+		t.Fatal(err)
+	}
+	<-received // drain FindingResolved
+
+	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityCritical), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case event := <-received:
+		if event.Kind != notify.KindFindingRecurred {
+			t.Errorf("event.Kind = %q, want %q", event.Kind, notify.KindFindingRecurred)
+		}
+	default:
+		t.Fatal("expected a FindingRecurred notification")
+	}
+}
+
+func TestIngest_NoWebhookConfigured_NeverCallsOut(t *testing.T) {
+	// No Webhook on the policy at all - Ingest must not attempt any HTTP call. If it tried to
+	// reach an unconfigured/empty URL this would fail fast (notify.Send rejects non-http(s) URLs),
+	// so a passing Ingest call here is itself the proof.
+	c, scheme := newFakeClient(t, policy("policy", []string{testProvider}, SeverityHigh))
+	if _, err := Ingest(context.Background(), c, scheme, testSignal(SeverityCritical), nil); err != nil {
+		t.Fatal(err)
 	}
 }
 

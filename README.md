@@ -130,6 +130,26 @@ Matching is exact by construction: if the underlying signal's content actually c
 fingerprint changes too, the Suppression no longer matches, and the Finding resurfaces on its own
 - there's nothing to remember to delete or update.
 
+### Webhook notifications and digests
+
+Set `spec.webhook.url` on a `SignalPolicy` to get a JSON POST on every Finding created, resolved,
+or recurred in that namespace, plus a periodic digest (`CANDOR_DIGEST_INTERVAL`, default `24h`)
+tallying Findings by verification outcome and severity:
+
+```yaml
+apiVersion: candor.dev/v1alpha1
+kind: SignalPolicy
+metadata:
+  name: team-a
+spec:
+  providers: [trivy]
+  webhook:
+    url: https://example.com/hooks/candor
+```
+
+It's a plain JSON POST with no vendor-specific formatting - point it at whatever turns JSON into a
+Slack/Teams/PagerDuty message (a relay, a low-code webhook, etc.).
+
 ### Grafana dashboard
 
 Ship a pre-built dashboard (LLM calls, enrichment skipped by reason, verification transitions,

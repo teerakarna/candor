@@ -34,6 +34,10 @@ const (
 	testFingerprint2 = "fp-2"
 )
 
+// testPolicyName is shared across this package's test files - every SignalPolicy they build is
+// named "policy", and there's no reason each file should repeat the literal.
+const testPolicyName = "policy"
+
 // countingLLM is a fake llm.Client that counts calls and returns a fixed response - enough to
 // prove the gate around it, without needing a real API key or network access in CI.
 type countingLLM struct {
@@ -174,7 +178,7 @@ func namespacedName(f *candorv1alpha1.Finding) types.NamespacedName {
 
 func testPolicy(maxCalls int32) *candorv1alpha1.SignalPolicy {
 	return &candorv1alpha1.SignalPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: corev1.NamespaceDefault},
+		ObjectMeta: metav1.ObjectMeta{Name: testPolicyName, Namespace: corev1.NamespaceDefault},
 		Spec: candorv1alpha1.SignalPolicySpec{
 			Providers: []string{testProvider},
 			Budget:    &candorv1alpha1.Budget{MaxCalls: maxCalls, WindowSeconds: 86400},
@@ -237,7 +241,7 @@ func TestFindingReconciler_WithinBudget_CallsLLMAndDecrementsBudget(t *testing.T
 	}
 
 	got := &candorv1alpha1.SignalPolicy{}
-	if err := c.Get(ctx, types.NamespacedName{Namespace: corev1.NamespaceDefault, Name: "policy"}, got); err != nil {
+	if err := c.Get(ctx, types.NamespacedName{Namespace: corev1.NamespaceDefault, Name: testPolicyName}, got); err != nil {
 		t.Fatal(err)
 	}
 	if got.Status.BudgetCallsUsed != 1 {
