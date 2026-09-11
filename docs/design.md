@@ -191,7 +191,19 @@ are plausible later additions, not v1.
    `values.yaml` key doesn't survive `kubebuilder edit --force` (the whole file is regenerated from
    the plugin's own template, not merged) - a fourth recurring hand-fix, added to CONTRIBUTING.md
    alongside the original three.
-8. Generic webhook sink + periodic digest report.
+8. Generic webhook sink + periodic digest report. **Done.** `SignalPolicy.spec.webhook.url`
+   (optional) is the single opt-in for both: `internal/notify` is a small, vendor-agnostic package
+   that POSTs a JSON payload and knows nothing about Slack/Teams/PagerDuty - "one code path", per
+   the design. `internal/signal.Ingest` sends an immediate `Event` notification (FindingCreated,
+   FindingResolved, FindingRecurred) on real transitions only - not on a routine content refresh or
+   an unchanged reconcile, which would just be noise. `internal/controller.DigestRunnable` is a
+   plain manager `Runnable` (a ticker loop, not a CRD-triggered reconciler - there's no event for
+   "time has passed") that, on `CANDOR_DIGEST_INTERVAL` (default 24h), lists every SignalPolicy
+   with a Webhook configured and sends a per-namespace `Digest` tallying Findings by verification
+   outcome and severity - the "AIOps: Prove It!" artifact the evidence base calls for. Both send
+   paths are best-effort: a failure is logged and counted (`candor_webhook_sends_total`), never
+   returned as an error - a flaky notification endpoint must not make Finding reconciliation or
+   the digest loop get stuck.
 9. `ProposePullRequest` action against the GitOps repo.
 10. Second provider (webhook ingest) + second LLM backend — proves both interfaces actually abstract.
 11. Blog article.

@@ -49,8 +49,18 @@ var (
 		Name: "candor_verification_transitions_total",
 		Help: "Total verification outcome transitions recorded while ingesting signals, by outcome (still_present|resolved|recurred).",
 	}, []string{"outcome"})
+
+	// WebhookSendsTotal counts every internal/notify.Send call, by result. Covers both immediate
+	// Finding notifications (internal/signal.Ingest) and the periodic digest
+	// (internal/controller.DigestRunnable) - Send never blocks either caller on failure, so this
+	// is how a broken webhook endpoint becomes visible instead of silently swallowed.
+	WebhookSendsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "candor_webhook_sends_total",
+		Help: "Total webhook notification/digest sends, by result (success|error).",
+	}, []string{"result"})
 )
 
 func init() {
-	metrics.Registry.MustRegister(LLMCallsTotal, EnrichmentSkippedTotal, BudgetCallsUsed, BudgetCallsLimit, VerificationTransitionsTotal)
+	metrics.Registry.MustRegister(LLMCallsTotal, EnrichmentSkippedTotal, BudgetCallsUsed, BudgetCallsLimit,
+		VerificationTransitionsTotal, WebhookSendsTotal)
 }

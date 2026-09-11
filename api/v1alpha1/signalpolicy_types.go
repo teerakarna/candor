@@ -51,6 +51,23 @@ type SignalPolicySpec struct {
 	// until the window resets - it never silently keeps spending past the ceiling.
 	// +optional
 	Budget *Budget `json:"budget,omitempty"`
+
+	// webhook configures a generic JSON sink for this namespace - the same URL is used both for
+	// immediate notifications (a Finding created, resolved, or recurred) and the periodic digest
+	// (docs/design.md: "one code path covers Slack/Teams/PagerDuty/anything" - a single generic
+	// payload shape, not a per-vendor integration). Optional - omitted means no notifications and
+	// no digest for this namespace.
+	// +optional
+	Webhook *Webhook `json:"webhook,omitempty"`
+}
+
+// Webhook is a generic JSON notification sink.
+type Webhook struct {
+	// url receives an HTTP POST with a JSON body on every notification and digest. Must be
+	// http:// or https:// - checked at send time (internal/notify.Send), not admission time, to
+	// keep the schema simple.
+	// +required
+	URL string `json:"url"`
 }
 
 // Budget bounds LLM enrichment calls over a rolling window.
@@ -106,6 +123,7 @@ type SignalPolicyStatus struct {
 // +kubebuilder:printcolumn:name="MinSeverity",type=string,JSONPath=".spec.minSeverity"
 // +kubebuilder:printcolumn:name="BudgetUsed",type=integer,JSONPath=".status.budgetCallsUsed"
 // +kubebuilder:printcolumn:name="BudgetMax",type=integer,JSONPath=".spec.budget.maxCalls"
+// +kubebuilder:printcolumn:name="Webhook",type=string,JSONPath=".spec.webhook.url"
 
 // SignalPolicy is the Schema for the signalpolicies API
 type SignalPolicy struct {

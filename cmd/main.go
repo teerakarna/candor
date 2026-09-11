@@ -20,6 +20,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -242,6 +243,20 @@ func main() {
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
+
+	digestInterval := 24 * time.Hour
+	if v := os.Getenv("CANDOR_DIGEST_INTERVAL"); v != "" {
+		parsed, err := time.ParseDuration(v)
+		if err != nil {
+			setupLog.Error(err, "invalid CANDOR_DIGEST_INTERVAL, falling back to default", "value", v, "default", digestInterval)
+		} else {
+			digestInterval = parsed
+		}
+	}
+	if err := mgr.Add(&controller.DigestRunnable{Client: mgr.GetClient(), Interval: digestInterval}); err != nil {
+		setupLog.Error(err, "Failed to add digest runnable")
+		os.Exit(1)
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "Failed to set up health check")
