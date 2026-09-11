@@ -190,7 +190,11 @@ are plausible later additions, not v1.
    section calls for, not decoration. Also discovered and documented: a custom top-level
    `values.yaml` key doesn't survive `kubebuilder edit --force` (the whole file is regenerated from
    the plugin's own template, not merged) - a fourth recurring hand-fix, added to CONTRIBUTING.md
-   alongside the original three.
+   alongside the original three. Tested for real, not just "the JSON parses": CI imports the
+   dashboard into a real Grafana instance and checks every panel round-trips (structural, not full
+   schema validation - Grafana's save API doesn't reject a bad panel type or query), and
+   `hack/grafana-preview/` is a local `docker compose` stack (fake metrics + Prometheus + Grafana,
+   both auto-provisioned) for a human visual check without a real cluster.
 8. Generic webhook sink + periodic digest report. **Done.** `SignalPolicy.spec.webhook.url`
    (optional) is the single opt-in for both: `internal/notify` is a small, vendor-agnostic package
    that POSTs a JSON payload and knows nothing about Slack/Teams/PagerDuty - "one code path", per
