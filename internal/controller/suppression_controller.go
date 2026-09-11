@@ -18,14 +18,23 @@ package controller
 
 import (
 	"context"
+	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
 )
+
+// conditionExpired mirrors whether Suppression.spec.expiresAt has passed - the only state this
+// reconciler manages. Actually applying (or lifting) suppression on a Finding is
+// FindingReconciler's job (internal/signal.FindActiveSuppression already re-checks expiry itself
+// on every Finding reconcile); this condition exists purely so `kubectl get suppressions` shows
+// that a Suppression has lapsed without an operator comparing timestamps by hand.
+const conditionExpired = "Expired"
 
 // SuppressionReconciler reconciles a Suppression object
 type SuppressionReconciler struct {
@@ -37,21 +46,46 @@ type SuppressionReconciler struct {
 // +kubebuilder:rbac:groups=candor.dev,resources=suppressions/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=candor.dev,resources=suppressions/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Suppression object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.25.0/pkg/reconcile
 func (r *SuppressionReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	suppression := &candorv1alpha1.Suppression{}
+	if err := r.Get(ctx, req.NamespacedName, suppression); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
 
-	// TODO(user): your logic here
+	if suppression.Spec.ExpiresAt == nil {
+		return ctrl.Result{}, nil
+	}
 
-	return ctrl.Result{}, nil
+	now := time.Now()
+	expired := !suppression.Spec.ExpiresAt.After(now)
+
+	condition := metav1.Condition{
+		Type:               conditionExpired,
+		ObservedGeneration: suppression.Generation,
+	}
+	if expired {
+		condition.Status = metav1.ConditionTrue
+		condition.Reason = "PastExpiresAt"
+		condition.Message = "expiresAt has passed - this Suppression no longer mutes anything"
+	} else {
+		condition.Status = metav1.ConditionFalse
+		condition.Reason = "NotYetExpired"
+		condition.Message = "still active"
+	}
+
+	changed := meta.SetStatusCondition(&suppression.Status.Conditions, condition)
+	if changed {
+		if err := r.Status().Update(ctx, suppression); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	if expired {
+		return ctrl.Result{}, nil
+	}
+	// Requeue exactly when it lapses, so the Expired condition flips without waiting on some
+	// other event to touch this object first.
+	return ctrl.Result{RequeueAfter: time.Until(suppression.Spec.ExpiresAt.Time)}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

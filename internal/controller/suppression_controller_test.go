@@ -54,14 +54,16 @@ var _ = Describe("Suppression Controller", func() {
 						Name:      resourceName,
 						Namespace: resourceNamespace,
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: candorv1alpha1.SuppressionSpec{
+						Fingerprint: "fp-test",
+						Reason:      "test suppression",
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &candorv1alpha1.Suppression{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
@@ -76,12 +78,13 @@ var _ = Describe("Suppression Controller", func() {
 				Scheme: k8sClient.Scheme(),
 			}
 
+			// No expiresAt on this resource, so Reconcile has nothing to compute - this just
+			// proves reconciling a real Suppression doesn't error. internal/controller's
+			// suppression_expiry_test.go covers the Expired condition logic directly.
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
 	})
 })

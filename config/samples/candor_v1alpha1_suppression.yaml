@@ -6,4 +6,6 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: suppression-sample
 spec:
-  # TODO(user): Add fields here
+  fingerprint: "REPLACE_WITH_FINDING_STATUS_FINGERPRINT"
+  reason: "known false positive - tracked in TICKET-123"
+  # expiresAt: "2026-12-31T00:00:00Z"

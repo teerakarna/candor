@@ -19,19 +19,29 @@ package controller
 import (
 	"context"
 	"math"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
 	"github.com/teerakarna/candor/internal/llm"
 	"github.com/teerakarna/candor/internal/metrics"
 	"github.com/teerakarna/candor/internal/signal"
 )
+
+// conditionSuppressed is the Finding status condition type set while an active Suppression
+// matches its current fingerprint (see internal/signal.FindActiveSuppression).
+const conditionSuppressed = "Suppressed"
 
 // FindingReconciler reconciles a Finding object: when its content needs enrichment (see
 // internal/signal.NeedsEnrichment - the gate slice 3 built for exactly this), it calls LLM.Enrich
@@ -59,18 +69,57 @@ type FindingReconciler struct {
 // +kubebuilder:rbac:groups=candor.dev,resources=findings/finalizers,verbs=update
 // +kubebuilder:rbac:groups=candor.dev,resources=signalpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=candor.dev,resources=signalpolicies/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=candor.dev,resources=suppressions,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *FindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
-	if r.LLM == nil {
-		return ctrl.Result{}, nil
-	}
-
 	finding := &candorv1alpha1.Finding{}
 	if err := r.Get(ctx, req.NamespacedName, finding); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// Suppression is checked regardless of whether an LLM is configured - it's about noise, not
+	// LLM spend, so it applies even to a deterministic-findings-only cluster. Checked before
+	// anything else so a suppressed Finding never reaches the LLM gate below it.
+	suppression, err := signal.FindActiveSuppression(ctx, r.Client, finding.Namespace, finding.Status.Fingerprint)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if suppression != nil {
+		meta.SetStatusCondition(&finding.Status.Conditions, metav1.Condition{
+			Type:               conditionSuppressed,
+			Status:             metav1.ConditionTrue,
+			Reason:             "Suppressed",
+			Message:            suppression.Spec.Reason,
+			ObservedGeneration: finding.Generation,
+		})
+		if err := r.Status().Update(ctx, finding); err != nil {
+			return ctrl.Result{}, err
+		}
+		metrics.EnrichmentSkippedTotal.WithLabelValues("suppressed").Inc()
+
+		result := ctrl.Result{}
+		if suppression.Spec.ExpiresAt != nil {
+			// Requeue exactly when the Suppression lapses, so the Finding gets re-evaluated (and
+			// its condition cleared) without waiting on some other event to touch it first.
+			result.RequeueAfter = time.Until(suppression.Spec.ExpiresAt.Time)
+		}
+		return result, nil
+	}
+
+	if meta.FindStatusCondition(finding.Status.Conditions, conditionSuppressed) != nil {
+		meta.RemoveStatusCondition(&finding.Status.Conditions, conditionSuppressed)
+		if err := r.Status().Update(ctx, finding); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	if r.LLM == nil {
+		metrics.EnrichmentSkippedTotal.WithLabelValues("no_llm_configured").Inc()
+		return ctrl.Result{}, nil
 	}
 
 	if !signal.NeedsEnrichment(finding) {
@@ -161,6 +210,34 @@ func (r *FindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&candorv1alpha1.Finding{}).
+		Watches(&candorv1alpha1.Suppression{}, handler.EnqueueRequestsFromMapFunc(r.findingsForSuppression)).
 		Named("finding").
 		Complete(r)
+}
+
+// findingsForSuppression maps a Suppression event (create/update/delete) to the Findings in its
+// namespace whose current fingerprint it mutes - the watch that makes suppression apply and lift
+// promptly, rather than only on the next unrelated Finding event.
+func (r *FindingReconciler) findingsForSuppression(ctx context.Context, obj client.Object) []reconcile.Request {
+	suppression, ok := obj.(*candorv1alpha1.Suppression)
+	if !ok {
+		return nil
+	}
+
+	findings := &candorv1alpha1.FindingList{}
+	if err := r.List(ctx, findings, client.InNamespace(suppression.Namespace)); err != nil {
+		logf.FromContext(ctx).Error(err, "listing Findings for Suppression watch", "suppression", suppression.Name)
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for i := range findings.Items {
+		f := &findings.Items[i]
+		if f.Status.Fingerprint == suppression.Spec.Fingerprint {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{Namespace: f.Namespace, Name: f.Name},
+			})
+		}
+	}
+	return requests
 }

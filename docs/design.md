@@ -154,7 +154,21 @@ are plausible later additions, not v1.
    policy - proven with real registered-metric assertions (`testutil.ToFloat64`), not just "the code
    compiles". `TestFindingReconciler_BudgetCostRegression` proves a budget of 2 caps real LLM calls
    to exactly 2 across 5 genuinely distinct Findings - the literal ceiling claim, enforced by test.
-6. `Suppression` CRD.
+6. `Suppression` CRD. **Done.** `Suppression.spec` is `fingerprint` (required - the exact
+   `Finding.status.fingerprint` value to mute), `reason` (required - suppression is never silent),
+   and optional `expiresAt`. Matching is exact by construction: `internal/signal.FindActiveSuppression`
+   matches on the literal fingerprint string, so if the underlying signal's content genuinely
+   changes, its fingerprint changes too, no longer matches, and the Finding resurfaces on its own -
+   there's no separate "resolved" state to fall out of sync. `FindingReconciler` checks for an
+   active Suppression before the LLM gate (so it applies even with no LLM configured - suppression
+   is about noise, not just cost), sets a `Suppressed` condition, and skips enrichment while active.
+   It watches `Suppression` objects directly (not just `Finding`), so creating, editing, or deleting
+   one re-evaluates every Finding it could affect immediately, rather than waiting for some
+   unrelated event to touch them. `SuppressionReconciler` maintains its own `Expired` condition
+   (requeued exactly at `expiresAt`) purely so `kubectl get suppressions` shows a lapsed one at a
+   glance. Also fixed in passing: `no_llm_configured` was documented in the
+   `candor_enrichment_skipped_total` metric's help text since slice 5 but never actually
+   incremented - it is now.
 7. Verification loop + published accuracy metrics + Grafana dashboard in the chart.
 8. Generic webhook sink + periodic digest report.
 9. `ProposePullRequest` action against the GitOps repo.

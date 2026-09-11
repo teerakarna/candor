@@ -14,7 +14,20 @@ spec:
     singular: suppression
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.fingerprint
+      name: Fingerprint
+      type: string
+    - jsonPath: .spec.reason
+      name: Reason
+      type: string
+    - jsonPath: .spec.expiresAt
+      name: ExpiresAt
+      type: date
+    - jsonPath: .status.conditions[?(@.type=="Expired")].status
+      name: Expired
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Suppression is the Schema for the suppressions API
@@ -39,10 +52,25 @@ spec:
           spec:
             description: spec defines the desired state of Suppression
             properties:
-              foo:
-                description: foo is an example field of Suppression. Edit suppression_types.go
-                  to remove/update
+              expiresAt:
+                description: |-
+                  expiresAt is when this Suppression stops applying. Omitted means it applies indefinitely
+                  (until deleted, or until the fingerprint itself changes).
+                format: date-time
                 type: string
+              fingerprint:
+                description: |-
+                  fingerprint is the exact Finding.status.fingerprint value to mute, in the Suppression's own
+                  namespace.
+                type: string
+              reason:
+                description: |-
+                  reason is a required human justification for muting this fingerprint - suppression is never
+                  silent or unexplained.
+                type: string
+            required:
+            - fingerprint
+            - reason
             type: object
           status:
             description: status defines the observed state of Suppression
@@ -50,14 +78,10 @@ spec:
               conditions:
                 description: |-
                   conditions represent the current state of the Suppression resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
 
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
-
-                  The status of each condition is one of True, False, or Unknown.
+                  The "Expired" condition is True once expiresAt has passed - the Suppression object and its
+                  Reason are kept as an audit trail rather than deleted, so this condition is how an operator
+                  sees at a glance that it has lapsed without needing to compare timestamps by hand.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.

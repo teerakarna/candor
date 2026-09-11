@@ -23,7 +23,7 @@ var (
 	// ratio is the direct, visible proof of docs/design.md pillar 2.
 	EnrichmentSkippedTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "candor_enrichment_skipped_total",
-		Help: "Total times enrichment was skipped without calling the LLM, by reason (not_needed|no_llm_configured|budget_exhausted).",
+		Help: "Total times enrichment was skipped without calling the LLM, by reason (not_needed|no_llm_configured|budget_exhausted|suppressed).",
 	}, []string{"reason"})
 
 	// BudgetCallsUsed and BudgetCallsLimit are gauges per SignalPolicy - cardinality is bounded by
