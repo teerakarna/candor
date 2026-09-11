@@ -1,0 +1,27 @@
+name: candor-grafana-preview
+
+services:
+  fake-metrics:
+    image: python:3.12-alpine
+    volumes:
+      - ./fake_metrics.py:/fake_metrics.py:ro
+    command: ["python3", "/fake_metrics.py"]
+
+  prometheus:
+    image: prom/prometheus:v3.6.0
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - fake-metrics
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./provisioning:/etc/grafana/provisioning:ro
+      - ../../charts/chart/files:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
