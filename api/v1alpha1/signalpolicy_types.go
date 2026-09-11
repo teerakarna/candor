@@ -24,16 +24,26 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// SignalPolicySpec defines the desired state of SignalPolicy
+// SignalPolicySpec defines the desired state of SignalPolicy.
+//
+// A SignalPolicy governs signals in its own namespace only - the same convention as
+// ResourceQuota, LimitRange, and NetworkPolicy. There is no cross-namespace targeting field;
+// a team opts a namespace in by creating a SignalPolicy inside it, and RBAC on SignalPolicy
+// itself controls who can do that.
 type SignalPolicySpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+	// providers this policy enables, e.g. ["trivy"]. Deliberately a free-form string list rather
+	// than a closed CRD enum: each provider's own reconciler simply ignores policies that don't
+	// name it, so adding a new provider later never requires a schema migration here.
+	// +kubebuilder:validation:MinItems=1
+	Providers []string `json:"providers"`
 
-	// foo is an example field of SignalPolicy. Edit signalpolicy_types.go to remove/update
+	// minSeverity is the minimum signal severity that produces a Finding. Signals below this
+	// threshold are ignored entirely - they never reach a Finding at all, so they can't
+	// contribute noise even before suppression exists (see docs/design.md pillar 3).
+	// +kubebuilder:validation:Enum=LOW;MEDIUM;HIGH;CRITICAL
+	// +kubebuilder:default=HIGH
 	// +optional
-	Foo *string `json:"foo,omitempty"`
+	MinSeverity string `json:"minSeverity,omitempty"`
 }
 
 // SignalPolicyStatus defines the observed state of SignalPolicy.

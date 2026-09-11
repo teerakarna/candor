@@ -6,4 +6,13 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: finding-sample
 spec:
-  # TODO(user): Add fields here
+  # Findings are normally created by a provider (see internal/provider/trivy), not applied by
+  # hand - this sample exists to document the shape.
+  source:
+    provider: trivy
+    kind: Deployment
+    name: api
+    refKind: VulnerabilityReport
+    refName: api-abc123
+  severity: CRITICAL
+  summary: "3 critical, 5 high, 2 medium, 1 low vulnerabilities in ghcr.io/example/api:v1.2.3"

@@ -17,7 +17,23 @@ spec:
     singular: finding
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.severity
+      name: Severity
+      type: string
+    - jsonPath: .spec.source.provider
+      name: Provider
+      type: string
+    - jsonPath: .spec.source.name
+      name: Resource
+      type: string
+    - jsonPath: .spec.summary
+      name: Summary
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Finding is the Schema for the findings API
@@ -42,10 +58,51 @@ spec:
           spec:
             description: spec defines the desired state of Finding
             properties:
-              foo:
-                description: foo is an example field of Finding. Edit finding_types.go
-                  to remove/update
+              severity:
+                description: severity of the underlying signal - the raw signal severity,
+                  not an LLM judgement.
+                enum:
+                - LOW
+                - MEDIUM
+                - HIGH
+                - CRITICAL
                 type: string
+              source:
+                description: source identifies the signal that produced this Finding.
+                properties:
+                  kind:
+                    description: |-
+                      kind, name identify the Kubernetes resource this finding is about - the workload the
+                      provider examined, not the signal object itself.
+                    type: string
+                  name:
+                    type: string
+                  provider:
+                    description: provider that produced this finding, e.g. "trivy".
+                    type: string
+                  refKind:
+                    description: |-
+                      refKind, refName identify the object the signal was read from (e.g. a Trivy
+                      VulnerabilityReport), for traceability back to raw evidence. Same namespace as the Finding.
+                    type: string
+                  refName:
+                    type: string
+                required:
+                - kind
+                - name
+                - provider
+                - refKind
+                - refName
+                type: object
+              summary:
+                description: |-
+                  summary is a short, deterministic, human-readable description generated from the signal's
+                  own data.
+                type: string
+            required:
+            - severity
+            - source
+            - summary
             type: object
           status:
             description: status defines the observed state of Finding

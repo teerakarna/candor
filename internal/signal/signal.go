@@ -1,0 +1,66 @@
+// Package signal defines the common representation every provider translates its native signal
+// format into, and the single choke point (Ingest) that turns a Signal into a Finding. This is
+// the seam the design doc's "provider pattern" depends on: a provider's only job is producing a
+// Signal; everything after that - policy filtering, fingerprinting (later), LLM enrichment
+// (later), budget accounting (later) - happens once, here, not once per provider.
+package signal
+
+// Severity levels, ordered low to high. Matches the enum on SignalPolicy.Spec.MinSeverity and
+// Finding.Spec.Severity.
+const (
+	SeverityLow      = "LOW"
+	SeverityMedium   = "MEDIUM"
+	SeverityHigh     = "HIGH"
+	SeverityCritical = "CRITICAL"
+)
+
+// severityRank orders severities for threshold comparisons. Not exported - callers compare via
+// AtLeast, so the ranking scheme can change without becoming part of the package's API.
+var severityRank = map[string]int{
+	SeverityLow:      0,
+	SeverityMedium:   1,
+	SeverityHigh:     2,
+	SeverityCritical: 3,
+}
+
+// AtLeast reports whether severity a is at least as severe as severity b. An unrecognised
+// severity ranks below every known one, so it never clears a real threshold.
+func AtLeast(a, b string) bool {
+	ra, ok := severityRank[a]
+	if !ok {
+		return false
+	}
+	rb, ok := severityRank[b]
+	if !ok {
+		return false
+	}
+	return ra >= rb
+}
+
+// Signal is one provider's deterministic reading of one piece of evidence about one Kubernetes
+// resource. Never carries an LLM opinion - Summary is generated from the signal's own data, not
+// inferred. LLM-derived hypotheses attach to the resulting Finding in a later slice, kept
+// separate so it's always possible to tell which parts of a Finding are fact and which are
+// interpretation.
+type Signal struct {
+	// Provider identifies which provider produced this signal, e.g. "trivy". Free-form, not a
+	// closed enum - see SignalPolicy.Spec.Providers for why.
+	Provider string
+
+	// Severity of the underlying evidence. One of the Severity* constants.
+	Severity string
+
+	// Namespace, Kind, Name identify the Kubernetes resource this signal is about - the workload,
+	// not the signal source object itself.
+	Namespace string
+	Kind      string
+	Name      string
+
+	// Summary is a short, deterministic, human-readable description.
+	Summary string
+
+	// RefKind, RefName identify the object this signal was read from (e.g. a Trivy
+	// VulnerabilityReport), for traceability back to raw evidence. Same namespace as the signal.
+	RefKind string
+	RefName string
+}

@@ -37,20 +37,14 @@ type FindingReconciler struct {
 // +kubebuilder:rbac:groups=candor.dev,resources=findings/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=candor.dev,resources=findings/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Finding object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.25.0/pkg/reconcile
+// Reconcile is intentionally a no-op for now. A Finding is created fully-populated by
+// internal/signal.Ingest, which is the only writer; there's nothing further to derive from a
+// Finding's own state yet. That changes in later slices - fingerprint verification (re-checking
+// whether a Finding's underlying condition cleared) and LLM enrichment both belong here once they
+// exist (see docs/design.md's delivery slices). The reconciler is still registered and watching
+// now so that transition doesn't require wiring anything new.
 func (r *FindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = logf.FromContext(ctx)
-
-	// TODO(user): your logic here
-
 	return ctrl.Result{}, nil
 }
 

@@ -18,13 +18,18 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
+	"github.com/teerakarna/candor/internal/provider"
 )
 
 // SignalPolicyReconciler reconciles a SignalPolicy object
@@ -37,19 +42,47 @@ type SignalPolicyReconciler struct {
 // +kubebuilder:rbac:groups=candor.dev,resources=signalpolicies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=candor.dev,resources=signalpolicies/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the SignalPolicy object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.25.0/pkg/reconcile
+// Reconcile validates the SignalPolicy and reports whether it's actually doing anything: a
+// policy naming an unrecognised provider is accepted by the API (Providers isn't a closed CRD
+// enum - see SignalPolicySpec) but would otherwise silently match nothing, which is exactly the
+// kind of quiet failure this project exists to avoid. There's no other state to reconcile yet -
+// SignalPolicy is read by providers at signal-ingest time (see internal/signal.Ingest), not
+// acted on here.
 func (r *SignalPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	policy := &candorv1alpha1.SignalPolicy{}
+	if err := r.Get(ctx, req.NamespacedName, policy); err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	var unknown []string
+	for _, p := range policy.Spec.Providers {
+		if !provider.IsKnown(p) {
+			unknown = append(unknown, p)
+		}
+	}
+
+	condition := metav1.Condition{
+		Type:               "Ready",
+		ObservedGeneration: policy.Generation,
+	}
+	if len(unknown) > 0 {
+		condition.Status = metav1.ConditionFalse
+		condition.Reason = "UnknownProvider"
+		condition.Message = fmt.Sprintf("not recognised, so this policy has no effect for: %s (known providers: %s)",
+			strings.Join(unknown, ", "), strings.Join(provider.Known, ", "))
+	} else {
+		condition.Status = metav1.ConditionTrue
+		condition.Reason = "Active"
+		condition.Message = fmt.Sprintf("watching providers: %s", strings.Join(policy.Spec.Providers, ", "))
+	}
+
+	meta.SetStatusCondition(&policy.Status.Conditions, condition)
+	if err := r.Status().Update(ctx, policy); err != nil {
+		log.Error(err, "Failed to update SignalPolicy status")
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, nil
 }

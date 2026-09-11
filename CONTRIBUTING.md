@@ -11,6 +11,14 @@ fingerprinting/budget model are still settling.
 - `make test` (runs `envtest` against a real control plane — not mocked) and `make lint` before
   opening a PR.
 - `make manifests generate` after editing any `_types.go` file, and commit the regenerated output.
+- After a CRD or RBAC change, regenerate the Helm chart:
+  `kubebuilder edit --plugins=helm/v2-alpha --output-dir=charts --force`. This **will** revert
+  three hand-maintained things back to their generated defaults — re-apply them every time:
+  - `charts/chart/values.yaml`: `manager.image.repository` back to `ghcr.io/teerakarna/candor`
+  - `charts/chart/.helmignore`: the `dist/chart/*.tgz` line back to `*.tgz`
+  - `.github/workflows/test-chart.yml`: triggers back to `branches: [main]`, and the
+    `helm lint` path back to `./charts/chart`
+  Verify with `helm lint charts/chart` and `helm template test charts/chart | grep image:` after.
 
 ## Design constraints that PRs must respect
 
