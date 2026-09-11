@@ -1,0 +1,6 @@
+## Append samples of your project ##
+resources:
+- candor_v1alpha1_signalpolicy.yaml
+- candor_v1alpha1_finding.yaml
+- candor_v1alpha1_suppression.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

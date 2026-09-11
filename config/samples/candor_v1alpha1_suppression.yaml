@@ -1,0 +1,9 @@
+apiVersion: candor.candor.dev/v1alpha1
+kind: Suppression
+metadata:
+  labels:
+    app.kubernetes.io/name: candor
+    app.kubernetes.io/managed-by: kustomize
+  name: suppression-sample
+spec:
+  # TODO(user): Add fields here

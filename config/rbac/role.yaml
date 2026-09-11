@@ -1,0 +1,38 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - candor.candor.dev
+  resources:
+  - findings
+  - signalpolicies
+  - suppressions
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - candor.candor.dev
+  resources:
+  - findings/finalizers
+  - signalpolicies/finalizers
+  - suppressions/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - candor.candor.dev
+  resources:
+  - findings/status
+  - signalpolicies/status
+  - suppressions/status
+  verbs:
+  - get
+  - patch
+  - update
