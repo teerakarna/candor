@@ -5,7 +5,7 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - candor.candor.dev
+  - candor.dev
   resources:
   - findings
   - signalpolicies
@@ -19,7 +19,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - candor.candor.dev
+  - candor.dev
   resources:
   - findings/finalizers
   - signalpolicies/finalizers
@@ -27,7 +27,7 @@ rules:
   verbs:
   - update
 - apiGroups:
-  - candor.candor.dev
+  - candor.dev
   resources:
   - findings/status
   - signalpolicies/status

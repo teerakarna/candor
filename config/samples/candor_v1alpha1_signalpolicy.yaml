@@ -1,4 +1,4 @@
-apiVersion: candor.candor.dev/v1alpha1
+apiVersion: candor.dev/v1alpha1
 kind: SignalPolicy
 metadata:
   labels:

@@ -3,9 +3,13 @@
 # and allow the plugins properly work.
 # More info: https://book.kubebuilder.io/reference/project-config.html
 cliVersion: 4.16.0
-domain: candor.dev
+domain: dev
 layout:
 - go.kubebuilder.io/v4
+plugins:
+  helm.kubebuilder.io/v2-alpha:
+    manifests: dist/install.yaml
+    output: charts
 projectName: candor
 repo: github.com/teerakarna/candor
 resources:
@@ -13,7 +17,7 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: candor.dev
+  domain: dev
   group: candor
   kind: SignalPolicy
   path: github.com/teerakarna/candor/api/v1alpha1
@@ -22,7 +26,7 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: candor.dev
+  domain: dev
   group: candor
   kind: Finding
   path: github.com/teerakarna/candor/api/v1alpha1
@@ -31,7 +35,7 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: candor.dev
+  domain: dev
   group: candor
   kind: Suppression
   path: github.com/teerakarna/candor/api/v1alpha1

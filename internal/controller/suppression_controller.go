@@ -33,9 +33,9 @@ type SuppressionReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=candor.candor.dev,resources=suppressions,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=candor.candor.dev,resources=suppressions/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=candor.candor.dev,resources=suppressions/finalizers,verbs=update
+// +kubebuilder:rbac:groups=candor.dev,resources=suppressions,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=candor.dev,resources=suppressions/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=candor.dev,resources=suppressions/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

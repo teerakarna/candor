@@ -2,9 +2,9 @@
 # since it depends on service name and namespace that are out of this kustomize package.
 # It should be run by config/default
 resources:
-- bases/candor.candor.dev_signalpolicies.yaml
-- bases/candor.candor.dev_findings.yaml
-- bases/candor.candor.dev_suppressions.yaml
+- bases/candor.dev_signalpolicies.yaml
+- bases/candor.dev_findings.yaml
+- bases/candor.dev_suppressions.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

@@ -4,20 +4,20 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.22.0
-  name: suppressions.candor.candor.dev
+  name: signalpolicies.candor.dev
 spec:
-  group: candor.candor.dev
+  group: candor.dev
   names:
-    kind: Suppression
-    listKind: SuppressionList
-    plural: suppressions
-    singular: suppression
+    kind: SignalPolicy
+    listKind: SignalPolicyList
+    plural: signalpolicies
+    singular: signalpolicy
   scope: Namespaced
   versions:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Suppression is the Schema for the suppressions API
+        description: SignalPolicy is the Schema for the signalpolicies API
         properties:
           apiVersion:
             description: |-
@@ -37,19 +37,19 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of Suppression
+            description: spec defines the desired state of SignalPolicy
             properties:
               foo:
-                description: foo is an example field of Suppression. Edit suppression_types.go
+                description: foo is an example field of SignalPolicy. Edit signalpolicy_types.go
                   to remove/update
                 type: string
             type: object
           status:
-            description: status defines the observed state of Suppression
+            description: status defines the observed state of SignalPolicy
             properties:
               conditions:
                 description: |-
-                  conditions represent the current state of the Suppression resource.
+                  conditions represent the current state of the SignalPolicy resource.
                   Each condition has a unique type and reflects the status of a specific aspect of the resource.
 
                   Standard condition types include:
