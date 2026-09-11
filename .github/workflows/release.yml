@@ -75,6 +75,10 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # buildx's native SLSA-shaped provenance attestation - who built this, from what source,
+          # with what build config. mode=max includes the full build definition, not just a summary.
+          provenance: mode=max
+          sbom: false # we generate and attest our own CycloneDX SBOM below instead
 
       - name: Trivy image scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

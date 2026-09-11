@@ -43,3 +43,7 @@ undermining its own thesis if it weren't upfront about how it's made. Every tech
 ## Reporting a security issue
 
 See [SECURITY.md](SECURITY.md).
+
+## Governance
+
+See [GOVERNANCE.md](GOVERNANCE.md) for how decisions get made.
