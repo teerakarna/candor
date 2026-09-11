@@ -39,10 +39,29 @@ spec:
           spec:
             description: spec defines the desired state of SignalPolicy
             properties:
-              foo:
-                description: foo is an example field of SignalPolicy. Edit signalpolicy_types.go
-                  to remove/update
+              minSeverity:
+                default: HIGH
+                description: |-
+                  minSeverity is the minimum signal severity that produces a Finding. Signals below this
+                  threshold are ignored entirely - they never reach a Finding at all, so they can't
+                  contribute noise even before suppression exists (see docs/design.md pillar 3).
+                enum:
+                - LOW
+                - MEDIUM
+                - HIGH
+                - CRITICAL
                 type: string
+              providers:
+                description: |-
+                  providers this policy enables, e.g. ["trivy"]. Deliberately a free-form string list rather
+                  than a closed CRD enum: each provider's own reconciler simply ignores policies that don't
+                  name it, so adding a new provider later never requires a schema migration here.
+                items:
+                  type: string
+                minItems: 1
+                type: array
+            required:
+            - providers
             type: object
           status:
             description: status defines the observed state of SignalPolicy

@@ -54,14 +54,23 @@ var _ = Describe("Finding Controller", func() {
 						Name:      resourceName,
 						Namespace: resourceNamespace,
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: candorv1alpha1.FindingSpec{
+						Source: candorv1alpha1.FindingSource{
+							Provider: "trivy",
+							Kind:     "Deployment",
+							Name:     "api",
+							RefKind:  "VulnerabilityReport",
+							RefName:  "api-report",
+						},
+						Severity: "HIGH",
+						Summary:  "test finding",
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &candorv1alpha1.Finding{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
@@ -76,12 +85,13 @@ var _ = Describe("Finding Controller", func() {
 				Scheme: k8sClient.Scheme(),
 			}
 
+			// FindingReconciler is a no-op for now (see finding_controller.go) - this just proves
+			// reconciling a real Finding doesn't error, which is all there is to assert until a
+			// later slice gives it actual work to do.
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
 	})
 })

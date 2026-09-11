@@ -123,6 +123,9 @@ are plausible later additions, not v1.
    (branch protection, required signed commits, Dependabot + auto-merge, OpenSSF Scorecard,
    GOVERNANCE.md). **Done.**
 2. `SignalPolicy` + `Finding` CRDs; Trivy provider; no LLM yet — deterministic findings only.
+   **Done.** Identity between reconciles is currently the signal's source (provider + originating
+   object), not real content-addressed fingerprinting — that's slice 3's job. Provider skips
+   registering itself if the target CRD isn't installed, rather than crashing the manager.
 3. Fingerprinting + cache + the cost regression test.
 4. LLM enrichment (Anthropic) behind the interface; ranked hypotheses with confidence.
 5. Budget ceiling + degraded mode + self-metrics + K8s Events.

@@ -6,4 +6,8 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: signalpolicy-sample
 spec:
-  # TODO(user): Add fields here
+  # Governs signals in this SignalPolicy's own namespace only - create one per namespace you
+  # want Candor watching, same convention as ResourceQuota/NetworkPolicy.
+  providers:
+    - trivy
+  minSeverity: HIGH

@@ -37,6 +37,8 @@ import (
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
 	"github.com/teerakarna/candor/internal/controller"
+	"github.com/teerakarna/candor/internal/provider"
+	"github.com/teerakarna/candor/internal/provider/trivy"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -201,6 +203,23 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "suppression")
+		os.Exit(1)
+	}
+	// The VulnerabilityReport CRD belongs to Trivy Operator, not Candor - a cluster without it
+	// installed is a normal, supported configuration (this provider is optional), not an error.
+	// Registering a watch for a CRD that doesn't exist would crash the whole manager, taking down
+	// every other controller with it, so this is checked before SetupWithManager rather than
+	// letting that happen.
+	if installed, err := provider.CRDInstalled(mgr.GetRESTMapper(), trivy.GroupVersionKind); err != nil {
+		setupLog.Error(err, "Failed to check whether the VulnerabilityReport CRD is installed")
+		os.Exit(1)
+	} else if !installed {
+		setupLog.Info("VulnerabilityReport CRD not found - skipping the Trivy provider (install Trivy Operator to enable it)")
+	} else if err := (&trivy.Reconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "trivy-provider")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

@@ -24,16 +24,48 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// FindingSpec defines the desired state of Finding
+// FindingSpec defines the desired state of Finding.
+//
+// This is deliberately the deterministic slice of what a Finding will eventually carry (see
+// docs/design.md: "Finding ... ranked hypotheses, confidence, verification outcome"). No LLM is
+// involved yet - Summary is generated straight from the signal's own data. Fields for
+// fingerprinting, hypotheses/confidence, and verification outcome are added in later slices
+// rather than reserved here now, so the schema only ever describes what's actually implemented.
 type FindingSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
+	// source identifies the signal that produced this Finding.
+	// +required
+	Source FindingSource `json:"source"`
 
-	// foo is an example field of Finding. Edit finding_types.go to remove/update
-	// +optional
-	Foo *string `json:"foo,omitempty"`
+	// severity of the underlying signal - the raw signal severity, not an LLM judgement.
+	// +kubebuilder:validation:Enum=LOW;MEDIUM;HIGH;CRITICAL
+	// +required
+	Severity string `json:"severity"`
+
+	// summary is a short, deterministic, human-readable description generated from the signal's
+	// own data.
+	// +required
+	Summary string `json:"summary"`
+}
+
+// FindingSource identifies where a Finding came from.
+type FindingSource struct {
+	// provider that produced this finding, e.g. "trivy".
+	// +required
+	Provider string `json:"provider"`
+
+	// kind, name identify the Kubernetes resource this finding is about - the workload the
+	// provider examined, not the signal object itself.
+	// +required
+	Kind string `json:"kind"`
+	// +required
+	Name string `json:"name"`
+
+	// refKind, refName identify the object the signal was read from (e.g. a Trivy
+	// VulnerabilityReport), for traceability back to raw evidence. Same namespace as the Finding.
+	// +required
+	RefKind string `json:"refKind"`
+	// +required
+	RefName string `json:"refName"`
 }
 
 // FindingStatus defines the observed state of Finding.
@@ -61,6 +93,11 @@ type FindingStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Severity",type=string,JSONPath=".spec.severity"
+// +kubebuilder:printcolumn:name="Provider",type=string,JSONPath=".spec.source.provider"
+// +kubebuilder:printcolumn:name="Resource",type=string,JSONPath=".spec.source.name"
+// +kubebuilder:printcolumn:name="Summary",type=string,JSONPath=".spec.summary"
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=".metadata.creationTimestamp"
 
 // Finding is the Schema for the findings API
 type Finding struct {
