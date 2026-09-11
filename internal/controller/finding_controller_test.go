@@ -56,7 +56,7 @@ var _ = Describe("Finding Controller", func() {
 					},
 					Spec: candorv1alpha1.FindingSpec{
 						Source: candorv1alpha1.FindingSource{
-							Provider: "trivy",
+							Provider: testProvider,
 							Kind:     "Deployment",
 							Name:     "api",
 							RefKind:  "VulnerabilityReport",

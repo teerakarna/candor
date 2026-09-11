@@ -37,6 +37,8 @@ import (
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
 	"github.com/teerakarna/candor/internal/controller"
+	"github.com/teerakarna/candor/internal/llm"
+	"github.com/teerakarna/candor/internal/llm/anthropic"
 	"github.com/teerakarna/candor/internal/provider"
 	"github.com/teerakarna/candor/internal/provider/trivy"
 	// +kubebuilder:scaffold:imports
@@ -191,9 +193,26 @@ func main() {
 		setupLog.Error(err, "Failed to create controller", "controller", "signalpolicy")
 		os.Exit(1)
 	}
+	// No API key configured is a supported configuration (deterministic findings only, no LLM
+	// cost) - not an error. See FindingReconciler.LLM's doc comment.
+	var llmClient llm.Client
+	if apiKey := os.Getenv("ANTHROPIC_API_KEY"); apiKey != "" {
+		llmModel := anthropic.DefaultModel
+		var opts []anthropic.Option
+		if m := os.Getenv("CANDOR_LLM_MODEL"); m != "" {
+			llmModel = m
+			opts = append(opts, anthropic.WithModel(m))
+		}
+		llmClient = anthropic.New(apiKey, opts...)
+		setupLog.Info("LLM enrichment enabled", "model", llmModel)
+	} else {
+		setupLog.Info("ANTHROPIC_API_KEY not set - LLM enrichment disabled, deterministic findings only")
+	}
+
 	if err := (&controller.FindingReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
+		LLM:    llmClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "finding")
 		os.Exit(1)

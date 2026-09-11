@@ -56,7 +56,7 @@ var _ = Describe("SignalPolicy Controller", func() {
 						Namespace: resourceNamespace,
 					},
 					Spec: candorv1alpha1.SignalPolicySpec{
-						Providers:   []string{"trivy"},
+						Providers:   []string{testProvider},
 						MinSeverity: "HIGH",
 					},
 				}

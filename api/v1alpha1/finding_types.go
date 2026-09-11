@@ -26,12 +26,10 @@ import (
 
 // FindingSpec defines the desired state of Finding.
 //
-// This is deliberately the deterministic slice of what a Finding will eventually carry (see
-// docs/design.md: "Finding ... ranked hypotheses, confidence, verification outcome"). No LLM is
-// involved yet - Summary is generated straight from the signal's own data. Fields for
-// hypotheses/confidence and verification outcome are added in later slices rather than reserved
-// here now, so the schema only ever describes what's actually implemented. Fingerprinting
-// (docs/design.md pillar 2) is on FindingStatus, not here - see that type's doc comment for why.
+// This is deliberately the deterministic slice of what a Finding carries - Summary is generated
+// straight from the signal's own data, never by an LLM. LLM-derived content (hypotheses,
+// confidence) lives on FindingStatus instead (see that type's doc comment for why), and
+// verification outcome is a still-later slice, added when it exists rather than reserved now.
 type FindingSpec struct {
 	// source identifies the signal that produced this Finding.
 	// +required
@@ -69,6 +67,30 @@ type FindingSource struct {
 	RefName string `json:"refName"`
 }
 
+// Hypothesis is one possible explanation for a Finding, with the LLM's own confidence in it.
+type Hypothesis struct {
+	// cause is a short description of a plausible underlying cause.
+	// +required
+	Cause string `json:"cause"`
+
+	// confidence is the model's own confidence in this hypothesis, as a percentage (0-100) - an
+	// integer, not a float: Kubernetes API convention discourages floats in CRD schemas
+	// (serialization behaves inconsistently across client languages), so this is the model's
+	// 0.0-1.0 confidence converted at the boundary (see internal/controller.FindingReconciler).
+	// Not calibrated
+	// against ground truth (docs/design.md's per-model accuracy measurement is a future
+	// addition, not implemented) - treat as the model's stated confidence, not a verified
+	// probability.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	// +required
+	Confidence int32 `json:"confidence"`
+
+	// rationale is a short explanation for why this cause is plausible.
+	// +optional
+	Rationale string `json:"rationale,omitempty"`
+}
+
 // FindingStatus defines the observed state of Finding.
 type FindingStatus struct {
 	// fingerprint is a content-addressed hash of this Finding's current spec, recomputed every
@@ -80,11 +102,18 @@ type FindingStatus struct {
 	Fingerprint string `json:"fingerprint,omitempty"`
 
 	// enrichedFingerprint is the Fingerprint value that was last successfully enriched by an LLM.
-	// Empty means never enriched. Written by the enrichment reconciler (a later slice - nothing
-	// sets this yet), never by the code that writes Spec/Fingerprint. When it differs from
-	// Fingerprint, enrichment is needed - see internal/signal.NeedsEnrichment.
+	// Empty means never enriched. Written by FindingReconciler, never by the code that writes
+	// Spec/Fingerprint. When it differs from Fingerprint, enrichment is needed - see
+	// internal/signal.NeedsEnrichment.
 	// +optional
 	EnrichedFingerprint string `json:"enrichedFingerprint,omitempty"`
+
+	// hypotheses are the LLM's ranked, competing explanations for this Finding - never a single
+	// asserted cause (docs/design.md pillar 4). Only present once EnrichedFingerprint matches
+	// Fingerprint; stale entries from a prior fingerprint are overwritten wholesale on
+	// re-enrichment, not merged with new ones.
+	// +optional
+	Hypotheses []Hypothesis `json:"hypotheses,omitempty"`
 
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file

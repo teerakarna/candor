@@ -34,6 +34,21 @@ manager:
     # Health probe server port
     port: 8081
 
+  ## Environment variables
+  ##
+  env:
+    - name: ANTHROPIC_API_KEY
+      valueFrom:
+        secretKeyRef:
+          key: anthropic-api-key
+          name: candor-llm
+          optional: true
+
+  ## Env overrides (--set manager.envOverrides.VAR=value)
+  ## Same name in env above: this value takes precedence.
+  ##
+  envOverrides: {}
+
   ## Image pull secrets
   ##
   # imagePullSecrets:
