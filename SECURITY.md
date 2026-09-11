@@ -16,11 +16,18 @@ Please do not disclose the issue publicly until it has been addressed.
 Candor ingests untrusted signal data (log lines, alert payloads, image metadata) that feeds into
 LLM prompts. The main areas of security interest are:
 
-- **Prompt injection**: anything that lets ingested telemetry alter the selected action rather than
-  only the finding's narrative content. Model output must only ever select from the fixed action
-  catalog (see the design doc) — never emit or influence a free-form action.
+- **Prompt injection**: anything that lets ingested telemetry alter the model's output shape
+  rather than only its narrative content. Enrichment output (`internal/llm`) is grammar-constrained
+  to a fixed hypotheses schema via the Anthropic API's structured outputs (see
+  `internal/llm/anthropic`'s package doc) — there is no free-form output path for injected content
+  to escape through. Once action-taking exists (a later slice), the same constraint applies: model
+  output must only ever select from the fixed action catalog, never emit or influence one.
 - **RBAC scope creep**: the operator's ServiceAccount is read-only by default; any change that
   grants it broader permissions is a security-relevant change, not a routine one.
-- **Secrets handling**: LLM API keys, webhook URLs, and GitOps repo credentials.
+- **Secrets handling**: the LLM API key (`ANTHROPIC_API_KEY`, sourced from the `candor-llm` Secret's
+  `anthropic-api-key` key — see `charts/chart/values.yaml`'s `manager.env`), webhook URLs, and
+  GitOps repo credentials. The key is optional at the Kubernetes level (`optional: true` on the
+  `secretKeyRef`) precisely so a missing secret degrades to "no enrichment" rather than blocking
+  pod startup - never treat a missing key as something to work around by relaxing that.
 - **The GitOps write path**: anything that could cause a proposed pull request to be merged or
   applied without human review.

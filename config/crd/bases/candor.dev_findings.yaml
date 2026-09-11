@@ -176,9 +176,9 @@ spec:
               enrichedFingerprint:
                 description: |-
                   enrichedFingerprint is the Fingerprint value that was last successfully enriched by an LLM.
-                  Empty means never enriched. Written by the enrichment reconciler (a later slice - nothing
-                  sets this yet), never by the code that writes Spec/Fingerprint. When it differs from
-                  Fingerprint, enrichment is needed - see internal/signal.NeedsEnrichment.
+                  Empty means never enriched. Written by FindingReconciler, never by the code that writes
+                  Spec/Fingerprint. When it differs from Fingerprint, enrichment is needed - see
+                  internal/signal.NeedsEnrichment.
                 type: string
               fingerprint:
                 description: |-
@@ -188,6 +188,43 @@ spec:
                   same Finding as its content changes over time, and Fingerprint is how that changing
                   content gets tracked without churning object identity.
                 type: string
+              hypotheses:
+                description: |-
+                  hypotheses are the LLM's ranked, competing explanations for this Finding - never a single
+                  asserted cause (docs/design.md pillar 4). Only present once EnrichedFingerprint matches
+                  Fingerprint; stale entries from a prior fingerprint are overwritten wholesale on
+                  re-enrichment, not merged with new ones.
+                items:
+                  description: Hypothesis is one possible explanation for a Finding,
+                    with the LLM's own confidence in it.
+                  properties:
+                    cause:
+                      description: cause is a short description of a plausible underlying
+                        cause.
+                      type: string
+                    confidence:
+                      description: |-
+                        confidence is the model's own confidence in this hypothesis, as a percentage (0-100) - an
+                        integer, not a float: Kubernetes API convention discourages floats in CRD schemas
+                        (serialization behaves inconsistently across client languages), so this is the model's
+                        0.0-1.0 confidence converted at the boundary (see internal/controller.FindingReconciler).
+                        Not calibrated
+                        against ground truth (docs/design.md's per-model accuracy measurement is a future
+                        addition, not implemented) - treat as the model's stated confidence, not a verified
+                        probability.
+                      format: int32
+                      maximum: 100
+                      minimum: 0
+                      type: integer
+                    rationale:
+                      description: rationale is a short explanation for why this cause
+                        is plausible.
+                      type: string
+                  required:
+                  - cause
+                  - confidence
+                  type: object
+                type: array
             type: object
         required:
         - spec

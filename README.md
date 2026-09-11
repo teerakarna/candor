@@ -89,6 +89,24 @@ make uninstall
 make undeploy
 ```
 
+## Configuration
+
+Deterministic findings (Trivy → `Finding`) work out of the box with no configuration. LLM
+enrichment (ranked hypotheses on each `Finding`) is opt-in - without an API key it's simply not
+active, not degraded:
+
+```sh
+kubectl create secret generic candor-llm --namespace candor-system \
+  --from-literal=anthropic-api-key=<your key>
+```
+
+Uses [Anthropic's structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
+so enrichment output is grammar-constrained to the hypotheses schema - see
+[`internal/llm/anthropic`](internal/llm/anthropic) and [`SECURITY.md`](SECURITY.md) for why that
+matters given the input is untrusted scanner data. Override the model with
+`CANDOR_LLM_MODEL` (default: `claude-sonnet-5`) via `manager.envOverrides` in the Helm chart's
+values.
+
 ## Project Distribution
 
 Two install paths, both produced by the release pipeline — nothing hand-built or committed to

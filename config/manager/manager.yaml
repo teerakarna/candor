@@ -65,6 +65,17 @@ spec:
           - --health-probe-bind-address=:8081
         image: controller:latest
         name: manager
+        env:
+          # Optional: not set, and the secret/key absent, means LLM enrichment is disabled -
+          # deterministic findings only, a fully supported configuration (see
+          # internal/controller.FindingReconciler.LLM's doc comment). optional: true means a
+          # missing secret/key leaves the env var simply unset rather than failing pod startup.
+          - name: ANTHROPIC_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: candor-llm
+                key: anthropic-api-key
+                optional: true
         ports:
         - containerPort: 8081
           name: health

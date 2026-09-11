@@ -134,7 +134,15 @@ are plausible later additions, not v1.
    `NeedsEnrichment` makes exactly one true→false transition across N ingests of identical content,
    and reverses only when content actually changes - it can't yet prove "one LLM call" literally,
    since none exists; that's slice 4's own test, trivial once this mechanism exists to sit on.
-4. LLM enrichment (Anthropic) behind the interface; ranked hypotheses with confidence.
+4. LLM enrichment (Anthropic) behind the interface; ranked hypotheses with confidence. **Done.**
+   `internal/llm.Client` is the interface; `internal/llm/anthropic` is the only implementation so
+   far. Uses Anthropic's structured outputs (grammar-constrained JSON, GA as of late 2025) rather
+   than the older tool-use-emulation workaround, verified against the real, current API request
+   shape before building against it. `FindingReconciler` is the gate: `NeedsEnrichment` (slice 3)
+   decides whether to call at all, so the cost regression test from slice 3 is now literal - it
+   counts real (fake, interface-real) LLM calls across N reconciles, not just fingerprint
+   transitions. `ANTHROPIC_API_KEY` unset is a fully supported configuration (deterministic
+   findings only), not an error, matching the "provider not installed" stance from slice 2.
 5. Budget ceiling + degraded mode + self-metrics + K8s Events.
 6. `Suppression` CRD.
 7. Verification loop + published accuracy metrics + Grafana dashboard in the chart.
