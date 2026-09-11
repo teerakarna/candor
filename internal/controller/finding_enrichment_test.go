@@ -2,13 +2,18 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
@@ -36,7 +41,7 @@ func (f *countingLLM) Enrich(ctx context.Context, req llm.Request) (llm.Response
 
 func newTestFinding(name string) *candorv1alpha1.Finding {
 	return &candorv1alpha1.Finding{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: corev1.NamespaceDefault},
 		Spec: candorv1alpha1.FindingSpec{
 			Source: candorv1alpha1.FindingSource{
 				Provider: testProvider, Kind: "Deployment", Name: "api",
@@ -157,4 +162,117 @@ func TestFindingReconciler_CostRegression(t *testing.T) {
 
 func namespacedName(f *candorv1alpha1.Finding) types.NamespacedName {
 	return types.NamespacedName{Namespace: f.Namespace, Name: f.Name}
+}
+
+func testPolicy(maxCalls int32) *candorv1alpha1.SignalPolicy {
+	return &candorv1alpha1.SignalPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: corev1.NamespaceDefault},
+		Spec: candorv1alpha1.SignalPolicySpec{
+			Providers: []string{testProvider},
+			Budget:    &candorv1alpha1.Budget{MaxCalls: maxCalls, WindowSeconds: 86400},
+		},
+	}
+}
+
+func TestFindingReconciler_BudgetExhausted_SkipsLLMAndEmitsEvent(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := candorv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	finding := newTestFinding("f1")
+	policy := testPolicy(0) // already exhausted - zero calls allowed
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(finding, policy).
+		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}).Build()
+
+	fakeLLM := &countingLLM{resp: llm.Response{Hypotheses: []llm.Hypothesis{{Cause: "x", Confidence: 0.5}}}}
+	recorder := record.NewFakeRecorder(10)
+	r := &FindingReconciler{Client: c, Scheme: scheme, LLM: fakeLLM, Recorder: recorder}
+
+	ctx := context.Background()
+	if _, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: namespacedName(finding)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := fakeLLM.calls.Load(); got != 0 {
+		t.Fatalf("LLM calls = %d, want 0 (budget already exhausted)", got)
+	}
+
+	select {
+	case event := <-recorder.Events:
+		if !strings.Contains(event, "BudgetExhausted") {
+			t.Errorf("event = %q, want it to mention BudgetExhausted", event)
+		}
+	default:
+		t.Fatal("expected a BudgetExhausted event, got none")
+	}
+}
+
+func TestFindingReconciler_WithinBudget_CallsLLMAndDecrementsBudget(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := candorv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	finding := newTestFinding("f1")
+	policy := testPolicy(5)
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(finding, policy).
+		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}).Build()
+
+	fakeLLM := &countingLLM{resp: llm.Response{Hypotheses: []llm.Hypothesis{{Cause: "x", Confidence: 0.5}}}}
+	r := &FindingReconciler{Client: c, Scheme: scheme, LLM: fakeLLM, Recorder: record.NewFakeRecorder(10)}
+
+	ctx := context.Background()
+	if _, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: namespacedName(finding)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := fakeLLM.calls.Load(); got != 1 {
+		t.Fatalf("LLM calls = %d, want 1", got)
+	}
+
+	got := &candorv1alpha1.SignalPolicy{}
+	if err := c.Get(ctx, types.NamespacedName{Namespace: corev1.NamespaceDefault, Name: "policy"}, got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Status.BudgetCallsUsed != 1 {
+		t.Errorf("BudgetCallsUsed = %d, want 1", got.Status.BudgetCallsUsed)
+	}
+}
+
+// TestFindingReconciler_BudgetCostRegression proves the budget ceiling actually caps real LLM
+// calls, not just that CheckBudget's own bookkeeping is correct in isolation (budget_test.go
+// already covers that): N reconciles against a policy with a budget of 2 must produce exactly 2
+// LLM calls and (N-2) BudgetExhausted skips, even though every one of the N reconciles is a
+// distinct Finding that genuinely needs enrichment (unlike the fingerprint cost regression test,
+// this is about volume exceeding a cap, not unchanged content).
+func TestFindingReconciler_BudgetCostRegression(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := candorv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	policy := testPolicy(2)
+	const n = 5
+	objs := make([]client.Object, 0, 1+n)
+	objs = append(objs, policy)
+	findings := make([]*candorv1alpha1.Finding, n)
+	for i := range n {
+		f := newTestFinding(fmt.Sprintf("f%d", i))
+		f.Status.Fingerprint = fmt.Sprintf("fp-%d", i) // each one distinct - genuinely needs enrichment
+		findings[i] = f
+		objs = append(objs, f)
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).
+		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}).Build()
+
+	fakeLLM := &countingLLM{resp: llm.Response{Hypotheses: []llm.Hypothesis{{Cause: "x", Confidence: 0.5}}}}
+	r := &FindingReconciler{Client: c, Scheme: scheme, LLM: fakeLLM, Recorder: record.NewFakeRecorder(n)}
+
+	ctx := context.Background()
+	for _, f := range findings {
+		if _, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: namespacedName(f)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if got := fakeLLM.calls.Load(); got != 2 {
+		t.Fatalf("LLM calls across %d distinct Findings with a budget of 2 = %d, want exactly 2", n, got)
+	}
 }

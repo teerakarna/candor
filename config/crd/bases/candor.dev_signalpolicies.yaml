@@ -14,7 +14,20 @@ spec:
     singular: signalpolicy
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.providers
+      name: Providers
+      type: string
+    - jsonPath: .spec.minSeverity
+      name: MinSeverity
+      type: string
+    - jsonPath: .status.budgetCallsUsed
+      name: BudgetUsed
+      type: integer
+    - jsonPath: .spec.budget.maxCalls
+      name: BudgetMax
+      type: integer
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: SignalPolicy is the Schema for the signalpolicies API
@@ -39,6 +52,30 @@ spec:
           spec:
             description: spec defines the desired state of SignalPolicy
             properties:
+              budget:
+                description: |-
+                  budget bounds LLM enrichment spend for this policy's namespace over a rolling window.
+                  Optional - omitted means unlimited, relying entirely on the fingerprint gate (slice 3) to
+                  bound cost. When the limit is reached, enrichment degrades to deterministic-only findings
+                  until the window resets - it never silently keeps spending past the ceiling.
+                properties:
+                  maxCalls:
+                    description: maxCalls is the maximum number of LLM enrichment
+                      calls allowed within one window.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  windowSeconds:
+                    default: 86400
+                    description: |-
+                      windowSeconds is the rolling window length. Rolling from whenever the window last reset,
+                      not calendar-aligned - simpler to reason about, no timezone/cron edge cases.
+                    format: int32
+                    minimum: 60
+                    type: integer
+                required:
+                - maxCalls
+                type: object
               minSeverity:
                 default: HIGH
                 description: |-
@@ -66,6 +103,17 @@ spec:
           status:
             description: status defines the observed state of SignalPolicy
             properties:
+              budgetCallsUsed:
+                description: budgetCallsUsed is the number of LLM calls made within
+                  the current budget window.
+                format: int32
+                type: integer
+              budgetWindowStart:
+                description: |-
+                  budgetWindowStart is when the current budget window began. Unset means no window is active
+                  yet - no enrichment call has been checked against this policy's budget since the last reset.
+                format: date-time
+                type: string
               conditions:
                 description: |-
                   conditions represent the current state of the SignalPolicy resource.

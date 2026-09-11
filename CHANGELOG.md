@@ -26,3 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   outputs - never a single asserted cause, and no free-form output path for injected scanner data
   to escape through. Opt-in: no `ANTHROPIC_API_KEY` means deterministic findings only, a fully
   supported configuration, not a degraded one.
+- Budget ceiling on LLM enrichment spend: `SignalPolicy.spec.budget` (max calls per rolling window,
+  optional - unlimited if omitted). On exhaustion, enrichment degrades to deterministic-only
+  findings (not an error) and a Warning Event fires on the `SignalPolicy`. Self-observability via
+  four Prometheus metrics (`candor_llm_calls_total`, `candor_enrichment_skipped_total`,
+  `candor_signalpolicy_budget_calls_used`, `candor_signalpolicy_budget_calls_limit`) exposed on the
+  existing manager metrics endpoint - proven with real metric-value assertions, and a test proving a
+  budget of 2 caps real LLM calls to exactly 2 across 5 distinct Findings.

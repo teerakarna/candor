@@ -17,6 +17,7 @@ const (
 	// and importing trivy here would cycle back (trivy imports signal). Ingest doesn't care what
 	// the provider is called; these tests just need a consistent, arbitrary value.
 	testProvider  = "trivy"
+	otherProvider = "falco" // any provider testProvider's policy doesn't enable
 	testNamespace = "team-a"
 	testKind      = "Deployment"
 	testResource  = "api"
@@ -30,7 +31,8 @@ func newFakeClient(t *testing.T, objs ...client.Object) (client.Client, *runtime
 	if err := candorv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).WithStatusSubresource(&candorv1alpha1.Finding{}).Build()
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).
+		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}).Build()
 	return c, scheme
 }
 
@@ -75,7 +77,7 @@ func TestIngest_BelowThreshold_Filtered(t *testing.T) {
 }
 
 func TestIngest_WrongProvider_Filtered(t *testing.T) {
-	c, scheme := newFakeClient(t, policy("policy", []string{"falco"}, SeverityLow))
+	c, scheme := newFakeClient(t, policy("policy", []string{otherProvider}, SeverityLow))
 
 	result, err := Ingest(context.Background(), c, scheme, testSignal(SeverityCritical), nil)
 	if err != nil {
@@ -146,7 +148,7 @@ func TestIngest_MultiplePolicies_AnyMatchAccepts(t *testing.T) {
 	// A LOW-threshold policy for another provider must not block a HIGH-threshold trivy policy
 	// from accepting a signal that clears it.
 	c, scheme := newFakeClient(t,
-		policy("policy1", []string{"falco"}, SeverityLow),
+		policy("policy1", []string{otherProvider}, SeverityLow),
 		policy("policy2", []string{testProvider}, SeverityHigh),
 	)
 
