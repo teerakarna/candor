@@ -208,6 +208,16 @@ prometheus:
   ##
   # annotations: {}
 
+## Grafana dashboard, shipped as a ConfigMap for the kube-prometheus-stack Grafana sidecar to
+## auto-discover (see sidecarLabel). Requires prometheus.enabled for there to be anything to plot.
+##
+grafanaDashboard:
+  enabled: false
+  # Label key the Grafana sidecar watches for (kube-prometheus-stack's default:
+  # grafana.sidecarLabel=grafana_dashboard). Change only if your Grafana deployment configures a
+  # different one.
+  sidecarLabel: grafana_dashboard
+
 ## Network policies for controlling traffic flow.
 ## Enable to restrict ingress to the controller manager.
 ##

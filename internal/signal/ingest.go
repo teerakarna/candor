@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"slices"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
+	"github.com/teerakarna/candor/internal/metrics"
 )
 
 // Result reports what Ingest did, so callers (and tests) can observe the outcome without Ingest
@@ -28,7 +30,12 @@ const (
 	ResultUnchanged Result = "unchanged"
 	// ResultFiltered means no Finding was produced: either no SignalPolicy in the signal's
 	// namespace enables this provider, or the signal's severity is below every policy that does.
+	// No Finding previously existed for this source either - there was nothing to resolve.
 	ResultFiltered Result = "filtered"
+	// ResultResolved means the signal was filtered (same reasons as ResultFiltered), but a
+	// previously-open Finding existed for this exact source - it has been marked Resolved rather
+	// than left stale. See Finding.Status.VerificationOutcome.
+	ResultResolved Result = "resolved"
 )
 
 // Ingest is the single path from a Signal to a Finding. It looks up whether any SignalPolicy in
@@ -45,6 +52,13 @@ func Ingest(ctx context.Context, c client.Client, scheme *runtime.Scheme, sig Si
 	}
 
 	if !anyPolicyAccepts(policies.Items, sig) {
+		resolved, err := resolveIfOpen(ctx, c, sig.Namespace, findingName(sig))
+		if err != nil {
+			return "", err
+		}
+		if resolved {
+			return ResultResolved, nil
+		}
 		return ResultFiltered, nil
 	}
 
@@ -76,16 +90,37 @@ func Ingest(ctx context.Context, c client.Client, scheme *runtime.Scheme, sig Si
 		return "", fmt.Errorf("upserting Finding %s/%s: %w", sig.Namespace, finding.Name, err)
 	}
 
-	// Fingerprint is a status field, and status is a separate subresource on Finding - the
-	// CreateOrUpdate above never persists it, so it needs its own write. Skipped when the value
-	// is already correct, both to avoid a needless resourceVersion bump on every reconcile of
-	// truly unchanged content, and because that "no write for no change" property is the same
-	// cost-consciousness this whole mechanism exists to enforce on the (later) LLM call it gates.
+	// Fingerprint and VerificationOutcome are status fields, and status is a separate subresource
+	// on Finding - the CreateOrUpdate above never persists them, so they need their own write.
+	// Skipped entirely when neither actually changes, both to avoid a needless resourceVersion
+	// bump on every reconcile of truly unchanged content, and because that "no write for no
+	// change" property is the same cost-consciousness this whole mechanism enforces on the LLM
+	// call Fingerprint gates.
+	//
+	// previousOutcome is read here, before either field is overwritten below - finding.Status is
+	// whatever CreateOrUpdate fetched from the API (its mutate closure above only touched .Spec),
+	// so on a brand new Finding this is the zero value, and on an existing one it's the outcome
+	// from the last time Ingest ran.
+	previousOutcome := finding.Status.VerificationOutcome
+	newOutcome := VerificationStillPresent
+	if previousOutcome == VerificationResolved {
+		newOutcome = VerificationRecurred
+	}
+
 	fp := Fingerprint(sig)
+	statusChanged := false
 	if finding.Status.Fingerprint != fp {
 		finding.Status.Fingerprint = fp
+		statusChanged = true
+	}
+	if finding.Status.VerificationOutcome != newOutcome {
+		finding.Status.VerificationOutcome = newOutcome
+		statusChanged = true
+		metrics.VerificationTransitionsTotal.WithLabelValues(verificationMetricLabel[newOutcome]).Inc()
+	}
+	if statusChanged {
 		if err := c.Status().Update(ctx, finding); err != nil {
-			return "", fmt.Errorf("updating Fingerprint status on Finding %s/%s: %w", sig.Namespace, finding.Name, err)
+			return "", fmt.Errorf("updating status on Finding %s/%s: %w", sig.Namespace, finding.Name, err)
 		}
 	}
 
@@ -121,6 +156,41 @@ func anyPolicyAccepts(policies []candorv1alpha1.SignalPolicy, sig Signal) bool {
 
 func providerEnabled(providers []string, provider string) bool {
 	return slices.Contains(providers, provider)
+}
+
+// verificationMetricLabel maps a VerificationOutcome constant (PascalCase, matching Kubernetes API
+// enum convention) to the snake_case label VerificationTransitionsTotal uses (matching every other
+// Prometheus label in this codebase).
+var verificationMetricLabel = map[string]string{
+	VerificationStillPresent: "still_present",
+	VerificationResolved:     "resolved",
+	VerificationRecurred:     "recurred",
+}
+
+// resolveIfOpen marks the Finding at namespace/name Resolved, if one exists and isn't already.
+// Called when a signal is filtered (no SignalPolicy accepts it - either none opts into this
+// provider, or its severity fell below every threshold that does), so a Finding whose underlying
+// condition has genuinely gone away doesn't sit there stale forever showing the old severity.
+// Returns false, nil as a no-op (not an error) in the common case: most filtered signals never had
+// a Finding to begin with, and a Finding already Resolved doesn't need writing again.
+func resolveIfOpen(ctx context.Context, c client.Client, namespace, name string) (bool, error) {
+	finding := &candorv1alpha1.Finding{}
+	if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, finding); err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("getting Finding %s/%s: %w", namespace, name, err)
+	}
+	if finding.Status.VerificationOutcome == VerificationResolved {
+		return false, nil
+	}
+
+	finding.Status.VerificationOutcome = VerificationResolved
+	if err := c.Status().Update(ctx, finding); err != nil {
+		return false, fmt.Errorf("resolving Finding %s/%s: %w", namespace, name, err)
+	}
+	metrics.VerificationTransitionsTotal.WithLabelValues(verificationMetricLabel[VerificationResolved]).Inc()
+	return true, nil
 }
 
 // findingName derives a stable Finding object name from the signal's source identity (not its

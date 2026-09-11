@@ -183,6 +183,116 @@ func TestIngest_WritesFingerprint(t *testing.T) {
 	}
 }
 
+func TestIngest_Creates_SetsVerificationStillPresent(t *testing.T) {
+	c, scheme := newFakeClient(t, policy("policy", []string{testProvider}, SeverityHigh))
+	sig := testSignal(SeverityCritical)
+
+	if _, err := Ingest(context.Background(), c, scheme, sig, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	findings := &candorv1alpha1.FindingList{}
+	if err := c.List(context.Background(), findings); err != nil {
+		t.Fatal(err)
+	}
+	if got := findings.Items[0].Status.VerificationOutcome; got != VerificationStillPresent {
+		t.Errorf("VerificationOutcome = %q, want %q", got, VerificationStillPresent)
+	}
+}
+
+func TestIngest_Filtered_NoExistingFinding_NoOp(t *testing.T) {
+	c, scheme := newFakeClient(t, policy("policy", []string{testProvider}, SeverityCritical))
+
+	result, err := Ingest(context.Background(), c, scheme, testSignal(SeverityLow), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != ResultFiltered {
+		t.Errorf("result = %q, want %q (nothing to resolve, never had a Finding)", result, ResultFiltered)
+	}
+}
+
+// TestIngest_SeverityDropsBelowThreshold_Resolves proves the resolution path this slice adds: a
+// Finding whose source later stops clearing any policy's threshold must be marked Resolved, not
+// left showing its old, now-stale severity forever - this is the exact "no verification of its own
+// remediation" gap docs/design.md pillar 4 exists to close.
+func TestIngest_SeverityDropsBelowThreshold_Resolves(t *testing.T) {
+	c, scheme := newFakeClient(t, policy("policy", []string{testProvider}, SeverityHigh))
+	ctx := context.Background()
+
+	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityCritical), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Ingest(ctx, c, scheme, testSignal(SeverityLow), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != ResultResolved {
+		t.Fatalf("result = %q, want %q", result, ResultResolved)
+	}
+
+	findings := &candorv1alpha1.FindingList{}
+	if err := c.List(ctx, findings); err != nil {
+		t.Fatal(err)
+	}
+	if len(findings.Items) != 1 {
+		t.Fatalf("got %d Findings, want 1 (resolved, not deleted)", len(findings.Items))
+	}
+	if got := findings.Items[0].Status.VerificationOutcome; got != VerificationResolved {
+		t.Errorf("VerificationOutcome = %q, want %q", got, VerificationResolved)
+	}
+}
+
+func TestIngest_ResolvedThenRecurred(t *testing.T) {
+	c, scheme := newFakeClient(t, policy("policy", []string{testProvider}, SeverityHigh))
+	ctx := context.Background()
+
+	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityCritical), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityLow), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Spec content is identical to the very first ingest (same severity, same summary) - only
+	// Status.VerificationOutcome transitions, so CreateOrUpdate correctly reports Unchanged on the
+	// Spec/ObjectMeta side. The Recurred transition is proven via Status below, not via Result.
+	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityCritical), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	findings := &candorv1alpha1.FindingList{}
+	if err := c.List(ctx, findings); err != nil {
+		t.Fatal(err)
+	}
+	if got := findings.Items[0].Status.VerificationOutcome; got != VerificationRecurred {
+		t.Errorf("VerificationOutcome = %q, want %q (was Resolved, source produced a real signal again)", got, VerificationRecurred)
+	}
+}
+
+func TestIngest_ResolvedAgain_NoOp(t *testing.T) {
+	c, scheme := newFakeClient(t, policy("policy", []string{testProvider}, SeverityHigh))
+	ctx := context.Background()
+
+	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityCritical), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityLow), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Filtering the same already-resolved source again must not error or re-write - resolveIfOpen
+	// is a no-op once VerificationOutcome is already Resolved.
+	result, err := Ingest(ctx, c, scheme, testSignal(SeverityLow), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != ResultFiltered {
+		t.Errorf("result = %q, want %q (already resolved - nothing new happened)", result, ResultFiltered)
+	}
+}
+
 // TestIngest_CostRegression is the design doc's own required check (docs/design.md,
 // "Verification"): re-ingesting unchanged content must never look new. There's no LLM call to
 // count yet (that's slice 4, gated by exactly this mechanism) - what's provable now, and what

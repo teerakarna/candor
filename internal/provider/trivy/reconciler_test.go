@@ -21,6 +21,8 @@ import (
 	"github.com/teerakarna/candor/internal/signal"
 )
 
+const testPolicyName = "policy"
+
 var _ = Describe("Trivy provider reconciler", func() {
 	var namespace string
 
@@ -78,7 +80,7 @@ var _ = Describe("Trivy provider reconciler", func() {
 
 	It("creates a Finding when a SignalPolicy opts in and the signal clears the threshold", func() {
 		policy := &candorv1alpha1.SignalPolicy{
-			ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: namespace},
+			ObjectMeta: metav1.ObjectMeta{Name: testPolicyName, Namespace: namespace},
 			Spec:       candorv1alpha1.SignalPolicySpec{Providers: []string{ProviderName}, MinSeverity: signal.SeverityHigh},
 		}
 		Expect(k8sClient.Create(ctx, policy)).To(Succeed())
@@ -103,7 +105,7 @@ var _ = Describe("Trivy provider reconciler", func() {
 
 	It("produces no Finding for a report with zero vulnerabilities", func() {
 		policy := &candorv1alpha1.SignalPolicy{
-			ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: namespace},
+			ObjectMeta: metav1.ObjectMeta{Name: testPolicyName, Namespace: namespace},
 			Spec:       candorv1alpha1.SignalPolicySpec{Providers: []string{ProviderName}, MinSeverity: signal.SeverityLow},
 		}
 		Expect(k8sClient.Create(ctx, policy)).To(Succeed())
@@ -116,6 +118,43 @@ var _ = Describe("Trivy provider reconciler", func() {
 		findings := &candorv1alpha1.FindingList{}
 		Expect(k8sClient.List(ctx, findings, client.InNamespace(namespace))).To(Succeed())
 		Expect(findings.Items).To(BeEmpty())
+	})
+
+	It("resolves an existing Finding once the vulnerabilities that produced it are fixed", func() {
+		policy := &candorv1alpha1.SignalPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: testPolicyName, Namespace: namespace},
+			Spec:       candorv1alpha1.SignalPolicySpec{Providers: []string{ProviderName}, MinSeverity: signal.SeverityHigh},
+		}
+		Expect(k8sClient.Create(ctx, policy)).To(Succeed())
+
+		report := newVulnReport("api-report", 3)
+		Expect(k8sClient.Create(ctx, report)).To(Succeed())
+		reconcile("api-report")
+
+		findings := &candorv1alpha1.FindingList{}
+		Expect(k8sClient.List(ctx, findings, client.InNamespace(namespace))).To(Succeed())
+		Expect(findings.Items).To(HaveLen(1))
+		Expect(findings.Items[0].Status.VerificationOutcome).To(Equal(signal.VerificationStillPresent))
+
+		By("fixing the vulnerabilities and re-reconciling")
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: "api-report"}, report)).To(Succeed())
+		Expect(unstructured.SetNestedField(report.Object, int64(0), "report", "summary", "criticalCount")).To(Succeed())
+		Expect(k8sClient.Update(ctx, report)).To(Succeed())
+		reconcile("api-report")
+
+		Expect(k8sClient.List(ctx, findings, client.InNamespace(namespace))).To(Succeed())
+		Expect(findings.Items).To(HaveLen(1), "the Finding must be kept, as the record that this happened - not deleted")
+		Expect(findings.Items[0].Status.VerificationOutcome).To(Equal(signal.VerificationResolved))
+
+		By("the vulnerabilities coming back")
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: "api-report"}, report)).To(Succeed())
+		Expect(unstructured.SetNestedField(report.Object, int64(2), "report", "summary", "criticalCount")).To(Succeed())
+		Expect(k8sClient.Update(ctx, report)).To(Succeed())
+		reconcile("api-report")
+
+		Expect(k8sClient.List(ctx, findings, client.InNamespace(namespace))).To(Succeed())
+		Expect(findings.Items).To(HaveLen(1))
+		Expect(findings.Items[0].Status.VerificationOutcome).To(Equal(signal.VerificationRecurred))
 	})
 })
 

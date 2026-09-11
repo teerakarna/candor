@@ -47,16 +47,45 @@ func TestTranslate_NoResourceLabels_NotOK(t *testing.T) {
 	}
 }
 
-func TestTranslate_ZeroVulnerabilities_NotOK(t *testing.T) {
+// TestTranslate_ZeroVulnerabilities_ProducesFilterableSignal proves the mechanism
+// internal/signal.Ingest's resolution path (ResultResolved) depends on: a workload-linked report
+// with zero vulnerabilities must still produce a Signal, not be silently dropped, so a previously
+// -vulnerable workload that's now clean can be recognised and its Finding resolved rather than
+// left showing stale severity.
+func TestTranslate_ZeroVulnerabilities_ProducesFilterableSignal(t *testing.T) {
 	u := vulnReport(testLabels, map[string]any{
 		fieldCritical: int64(0), fieldHigh: int64(0), fieldMedium: int64(0), fieldLow: int64(0),
 	}, "repo", "v1")
+	sig, ok, err := translate(u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("expected ok=true even when every severity count is zero - see the function's doc comment")
+	}
+	if sig.Severity != "" {
+		t.Errorf("Severity = %q, want empty (never clears any real SignalPolicy threshold, by design)", sig.Severity)
+	}
+	if sig.Summary != "no vulnerabilities found in repo:v1" {
+		t.Errorf("Summary = %q, want a clean-report message", sig.Summary)
+	}
+}
+
+func TestTranslate_NoSummaryField_NotOK(t *testing.T) {
+	u := &unstructured.Unstructured{}
+	u.SetGroupVersionKind(GroupVersionKind)
+	u.SetName("api-abc123")
+	u.SetNamespace("team-a")
+	u.SetLabels(testLabels)
+	// No report.summary set at all - a malformed/incomplete object, distinct from a real report
+	// confirming zero vulnerabilities.
+
 	_, ok, err := translate(u)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ok {
-		t.Error("expected ok=false when every severity count is zero")
+		t.Error("expected ok=false when report.summary is missing entirely")
 	}
 }
 

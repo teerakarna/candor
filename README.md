@@ -130,6 +130,17 @@ Matching is exact by construction: if the underlying signal's content actually c
 fingerprint changes too, the Suppression no longer matches, and the Finding resurfaces on its own
 - there's nothing to remember to delete or update.
 
+### Grafana dashboard
+
+Ship a pre-built dashboard (LLM calls, enrichment skipped by reason, verification transitions,
+budget usage, cost-avoidance ratio) as a ConfigMap the kube-prometheus-stack Grafana sidecar
+auto-discovers:
+
+```sh
+helm upgrade --install candor oci://ghcr.io/teerakarna/charts/candor \
+  --set prometheus.enabled=true --set grafanaDashboard.enabled=true
+```
+
 ## Project Distribution
 
 Two install paths, both produced by the release pipeline — nothing hand-built or committed to

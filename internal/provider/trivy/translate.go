@@ -38,9 +38,17 @@ const (
 	labelResourceName = "trivy-operator.resource.name"
 )
 
-// translate reads a VulnerabilityReport and produces a Signal, or ok=false if there's nothing
-// worth reporting on - either the report isn't linked to a workload (no resource labels), or it
-// found zero vulnerabilities at every severity.
+// translate reads a VulnerabilityReport and produces a Signal, or ok=false if it isn't linked to a
+// workload at all (no resource labels) - there's no resource identity to report against, so
+// there's nothing translate can produce either way.
+//
+// A workload-linked report with zero vulnerabilities at every severity still produces a Signal
+// (ok=true), with Severity left empty: signal.AtLeast never matches an unrecognised severity
+// against any real threshold, so this is guaranteed to be filtered by signal.Ingest - which is
+// exactly the point. Ingest's filtered path resolves any Finding that already exists for this
+// source, so a previously-vulnerable workload that's now clean gets its Finding marked Resolved
+// instead of left showing stale severity forever (docs/design.md pillar 4). Returning ok=false
+// here instead would have skipped Ingest entirely and lost that.
 func translate(u *unstructured.Unstructured) (sig signal.Signal, ok bool, err error) {
 	labels := u.GetLabels()
 	resourceKind := labels[labelResourceKind]
@@ -54,6 +62,10 @@ func translate(u *unstructured.Unstructured) (sig signal.Signal, ok bool, err er
 		return signal.Signal{}, false, fmt.Errorf("reading report.summary: %w", err)
 	}
 	if !found {
+		// No report.summary at all - not the same as "confirmed zero vulnerabilities" below,
+		// which needs the summary object to actually be present with all-zero counts. The real
+		// upstream schema requires this field, so this is a malformed/incomplete object in
+		// practice, not a clean report - nothing to translate either way.
 		return signal.Signal{}, false, nil
 	}
 
@@ -62,16 +74,15 @@ func translate(u *unstructured.Unstructured) (sig signal.Signal, ok bool, err er
 	medium := intCount(counts, "mediumCount")
 	low := intCount(counts, "lowCount")
 
-	severity, ok := highestNonZero(critical, high, medium, low)
-	if !ok {
-		return signal.Signal{}, false, nil
-	}
-
 	repository, _, _ := unstructured.NestedString(u.Object, "report", "artifact", "repository")
 	tag, _, _ := unstructured.NestedString(u.Object, "report", "artifact", "tag")
 
+	severity, hasVulnerabilities := highestNonZero(critical, high, medium, low)
 	summary := fmt.Sprintf("%d critical, %d high, %d medium, %d low vulnerabilities in %s:%s",
 		critical, high, medium, low, repository, tag)
+	if !hasVulnerabilities {
+		summary = fmt.Sprintf("no vulnerabilities found in %s:%s", repository, tag)
+	}
 
 	return signal.Signal{
 		Provider:  ProviderName,
