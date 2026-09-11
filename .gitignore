@@ -32,3 +32,6 @@ go.work
 # goreleaser build output (binaries, archives, checksums) - never committed, rebuilt on release.
 # Note: the Helm chart lives under charts/, not dist/, specifically to avoid this directory.
 /dist/
+
+# MkDocs build output - rebuilt and deployed by CI (see .github/workflows/publish-docs.yml).
+/docs-site/site/
