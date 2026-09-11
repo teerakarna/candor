@@ -32,6 +32,14 @@ change that touches these:
 
 Conventional commits (`feat:`, `fix:`, `docs:`, `chore:`) where practical.
 
+## On how this project is built
+
+This project is built collaboratively with Claude Code. That's disclosed here plainly, and it's
+visible in the commit history regardless — the point isn't the disclosure itself, it's that a
+project whose whole premise is refusing to assert what it can't back with evidence would be
+undermining its own thesis if it weren't upfront about how it's made. Every technical claim in
+[`docs/design.md`](docs/design.md) is sourced against a cited, checkable reference, not asserted.
+
 ## Reporting a security issue
 
 See [SECURITY.md](SECURITY.md).

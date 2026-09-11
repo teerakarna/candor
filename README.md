@@ -89,47 +89,30 @@ make undeploy
 
 ## Project Distribution
 
-Following the options to release and provide this solution to the users.
+Two install paths, both produced by the release pipeline — nothing hand-built or committed to
+`main`, so what you install is always a specific, versioned, signed release.
 
-### By providing a bundle with all YAML files
-
-1. Build the installer for the image built and published in the registry:
-
-```sh
-make build-installer IMG=<some-registry>/candor:tag
-```
-
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
-
-2. Using the installer
-
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
+### Helm chart (recommended)
 
 ```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/candor/<tag or branch>/dist/install.yaml
+helm install candor oci://ghcr.io/teerakarna/charts/candor --version <version> \
+  --namespace candor-system --create-namespace
 ```
 
-### By providing a Helm Chart
+Chart source lives under `charts/chart/` (generated via `kubebuilder edit
+--plugins=helm/v2-alpha --output-dir=charts`, regenerate the same way after changing the API or
+RBAC). Published to the OCI registry on every tagged release, alongside the signed image.
 
-1. Build the chart using the optional helm plugin
+### YAML bundle
+
+Each [release](https://github.com/teerakarna/candor/releases) attaches a versioned `install.yaml`
+(all resources, generated fresh at release time — not a stale copy on `main`):
 
 ```sh
-kubebuilder edit --plugins=helm/v2-alpha
+kubectl apply -f https://github.com/teerakarna/candor/releases/download/<tag>/install.yaml
 ```
 
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
-
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
+To build it yourself: `make build-installer IMG=ghcr.io/teerakarna/candor:<tag>`.
 
 ## Contributing
 

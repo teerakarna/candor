@@ -1,0 +1,55 @@
+version: 2
+
+# The container image is built, signed, and attested separately in
+# .github/workflows/release.yml (same verified cosign + SBOM pattern as service-demo) - this file
+# only handles the manager binary archives, checksums, changelog, and the GitHub Release itself.
+builds:
+  - id: manager
+    main: ./cmd
+    binary: manager
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: manager
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"
+      - "^test:"
+
+release:
+  prerelease: auto
+  footer: |
+    ## Container image and Helm chart
+
+    ```
+    ghcr.io/teerakarna/candor:{{ .Tag }}
+    ```
+
+    Signed with cosign (keyless, GitHub Actions OIDC) and carries a CycloneDX SBOM attestation.
+    Verify with:
+
+    ```
+    cosign verify --certificate-identity-regexp "^https://github.com/teerakarna/candor/" \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      ghcr.io/teerakarna/candor:{{ .Tag }}
+    ```
+
+    Helm chart: `oci://ghcr.io/teerakarna/charts/candor --version {{ .Version }}`
