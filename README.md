@@ -1,5 +1,7 @@
 # Candor
 
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/teerakarna/candor/badge)](https://securityscorecards.dev/viewer/?uri=github.com/teerakarna/candor)
+
 A Kubernetes operator that ingests signals from security/observability tools (Trivy, and more
 later), uses an LLM to enrich them into ranked hypotheses, and proposes remediation as GitOps pull
 requests — with bounded LLM spend and a published record of its own accuracy.

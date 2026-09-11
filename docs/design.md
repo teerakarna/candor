@@ -118,7 +118,10 @@ are plausible later additions, not v1.
 
 ## Delivery slices
 
-1. Repo prep, kubebuilder scaffold, CI, OSS boilerplate. **Done.**
+1. Repo prep, kubebuilder scaffold, CI, OSS boilerplate, release automation (goreleaser, cosign +
+   SBOM + buildx provenance on the image, Helm chart published to GHCR), repo governance
+   (branch protection, required signed commits, Dependabot + auto-merge, OpenSSF Scorecard,
+   GOVERNANCE.md). **Done.**
 2. `SignalPolicy` + `Finding` CRDs; Trivy provider; no LLM yet — deterministic findings only.
 3. Fingerprinting + cache + the cost regression test.
 4. LLM enrichment (Anthropic) behind the interface; ranked hypotheses with confidence.
@@ -131,6 +134,11 @@ are plausible later additions, not v1.
 11. Blog article.
 
 Quarantine/Enforcing mode is explicitly post-v1, gated on slice 7.
+
+Deferred, deliberately not slice 1: SLSA provenance for the goreleaser-built binary archives (the
+container image already gets buildx's native provenance attestation — the binaries would need the
+official `slsa-framework/slsa-github-generator` reusable workflow, which is a real new job wired to
+goreleaser's checksums, not a small extension of what already exists).
 
 ## Verification plan
 
