@@ -169,7 +169,28 @@ are plausible later additions, not v1.
    glance. Also fixed in passing: `no_llm_configured` was documented in the
    `candor_enrichment_skipped_total` metric's help text since slice 5 but never actually
    incremented - it is now.
-7. Verification loop + published accuracy metrics + Grafana dashboard in the chart.
+7. Verification loop + published accuracy metrics + Grafana dashboard in the chart. **Done.**
+   `Finding.status.verificationOutcome` (StillPresent/Resolved/Recurred - three of the design doc's
+   four states; "Superseded" is deliberately not implemented, since it would need multiple
+   providers reporting conflicting signals about the same Finding, which doesn't happen yet) is
+   written by `internal/signal.Ingest` on every reconcile of the Finding's source, not asserted
+   once at creation. The gap this closes: previously, a Trivy `VulnerabilityReport` whose
+   vulnerabilities got fixed (or dropped below every `SignalPolicy`'s threshold) left its Finding
+   showing stale severity forever - `translate()` now produces a Signal even for a clean report
+   (with an empty Severity that `signal.AtLeast` guarantees never clears any real threshold), so
+   `Ingest`'s existing filtered path can recognise it and resolve the Finding instead of just
+   discarding the signal. `candor_verification_transitions_total` (by outcome) is the published
+   accuracy signal - the resolved:recurred ratio over time is an honest, provable "did this
+   actually get fixed", not a calibrated ML accuracy score against a fixture suite (that's a
+   distinct, separately-deferred piece of future work, not something this slice claims). A Grafana
+   dashboard (`charts/chart/files/grafana-dashboard.json`, shipped as a ConfigMap gated by
+   `grafanaDashboard.enabled`, labelled for the kube-prometheus-stack sidecar to auto-discover)
+   plots LLM calls, enrichment skipped by reason, verification transitions, budget usage, and the
+   cost-avoidance ratio - the dashboard is the proof surface docs/design.md's interaction-surfaces
+   section calls for, not decoration. Also discovered and documented: a custom top-level
+   `values.yaml` key doesn't survive `kubebuilder edit --force` (the whole file is regenerated from
+   the plugin's own template, not merged) - a fourth recurring hand-fix, added to CONTRIBUTING.md
+   alongside the original three.
 8. Generic webhook sink + periodic digest report.
 9. `ProposePullRequest` action against the GitOps repo.
 10. Second provider (webhook ingest) + second LLM backend — proves both interfaces actually abstract.

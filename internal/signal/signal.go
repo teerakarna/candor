@@ -23,6 +23,14 @@ var severityRank = map[string]int{
 	SeverityCritical: 3,
 }
 
+// Verification outcomes, written to Finding.Status.VerificationOutcome by Ingest. See that field's
+// doc comment for what each one means and why there are three, not the design doc's full four.
+const (
+	VerificationStillPresent = "StillPresent"
+	VerificationResolved     = "Resolved"
+	VerificationRecurred     = "Recurred"
+)
+
 // AtLeast reports whether severity a is at least as severe as severity b. An unrecognised
 // severity ranks below every known one, so it never clears a real threshold.
 func AtLeast(a, b string) bool {

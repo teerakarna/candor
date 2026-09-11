@@ -27,6 +27,9 @@ spec:
     - jsonPath: .spec.summary
       name: Summary
       type: string
+    - jsonPath: .status.verificationOutcome
+      name: Verified
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -225,6 +228,26 @@ spec:
                   - confidence
                   type: object
                 type: array
+              verificationOutcome:
+                description: |-
+                  verificationOutcome is the result of the most recent re-check of this Finding's underlying
+                  signal, written by internal/signal.Ingest every time its source is reconciled - not a
+                  one-off assertion at creation time. "StillPresent" means the source was re-checked and the
+                  condition persists (true for a brand new Finding too - there's no distinct "never verified"
+                  state once the first reconcile has run). "Resolved" means the source no longer reports this
+                  condition (e.g. a Trivy VulnerabilityReport dropped to zero matching vulnerabilities, or its
+                  severity fell below every SignalPolicy's threshold) - the Finding object is kept, not
+                  deleted, as the record that it happened. "Recurred" means a Finding that was Resolved had
+                  its source produce a real signal again.
+
+                  Deliberately three of the design doc's four verification states, not all four: "Superseded"
+                  would apply once multiple providers can report conflicting signals about the same Finding,
+                  which doesn't happen yet - each Finding is keyed to exactly one (provider, source object).
+                enum:
+                - StillPresent
+                - Resolved
+                - Recurred
+                type: string
             type: object
         required:
         - spec

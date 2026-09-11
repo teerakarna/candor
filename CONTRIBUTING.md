@@ -13,11 +13,16 @@ fingerprinting/budget model are still settling.
 - `make manifests generate` after editing any `_types.go` file, and commit the regenerated output.
 - After a CRD or RBAC change, regenerate the Helm chart:
   `kubebuilder edit --plugins=helm/v2-alpha --output-dir=charts --force`. This **will** revert
-  three hand-maintained things back to their generated defaults — re-apply them every time:
+  hand-maintained things back to their generated defaults — re-apply them every time:
   - `charts/chart/values.yaml`: `manager.image.repository` back to `ghcr.io/teerakarna/candor`
   - `charts/chart/.helmignore`: the `dist/chart/*.tgz` line back to `*.tgz`
   - `.github/workflows/test-chart.yml`: triggers back to `branches: [main]`, and the
     `helm lint` path back to `./charts/chart`
+  - Any other custom top-level key added to `values.yaml` by hand (e.g. `grafanaDashboard`) - the
+    whole file is regenerated from the plugin's own template, so a key it doesn't already know
+    about is silently dropped, not merged. A custom **template** file under `charts/chart/templates/`
+    (and any file under `charts/chart/files/`) is untouched, since those aren't part of kustomize's
+    output - only `values.yaml` itself gets wholesale regenerated.
   Verify with `helm lint charts/chart` and `helm template test charts/chart | grep image:` after.
 
 ## Design constraints that PRs must respect

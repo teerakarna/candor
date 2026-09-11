@@ -39,6 +39,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   separate "resolved" tracking needed. Applies before the LLM gate, so it works even with no LLM
   configured. `FindingReconciler` now watches `Suppression` objects directly, so create/edit/delete
   takes effect immediately rather than waiting on the next unrelated Finding event.
+- Verification loop: `Finding.status.verificationOutcome` (StillPresent/Resolved/Recurred),
+  re-checked by `internal/signal.Ingest` every time a Finding's source is reconciled. A Trivy
+  `VulnerabilityReport` that drops to zero vulnerabilities (or below every `SignalPolicy`'s
+  threshold) now resolves its Finding instead of leaving it showing stale severity forever; a
+  resolved Finding whose source produces a real signal again is marked Recurred. Published as
+  `candor_verification_transitions_total` (by outcome) - the resolved:recurred ratio over time is
+  Candor's accuracy signal.
+- Grafana dashboard (`charts/chart/files/grafana-dashboard.json`), shipped as a ConfigMap behind
+  `grafanaDashboard.enabled` (off by default), labelled for the kube-prometheus-stack Grafana
+  sidecar to auto-discover. Plots LLM calls, enrichment skipped by reason, verification
+  transitions, budget usage, and the enrichment-calls-avoided ratio.
 
 ### Fixed
 

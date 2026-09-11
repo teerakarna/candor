@@ -38,8 +38,19 @@ var (
 		Name: "candor_signalpolicy_budget_calls_limit",
 		Help: "Configured max LLM calls per budget window, per SignalPolicy. Absent if the policy has no budget configured (unlimited).",
 	}, []string{"namespace", "signalpolicy"})
+
+	// VerificationTransitionsTotal is Candor's published accuracy signal (docs/design.md pillar
+	// 4): every time Ingest re-checks a Finding's source and its verification outcome actually
+	// changes, this counts the transition, by outcome (still_present|resolved|recurred). The
+	// resolved:recurred ratio over time is the honest, provable version of "did this actually get
+	// fixed" - not a calibrated accuracy score against ground truth (docs/design.md notes that as
+	// a deliberately deferred, separate piece of work, not implemented here).
+	VerificationTransitionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "candor_verification_transitions_total",
+		Help: "Total verification outcome transitions recorded while ingesting signals, by outcome (still_present|resolved|recurred).",
+	}, []string{"outcome"})
 )
 
 func init() {
-	metrics.Registry.MustRegister(LLMCallsTotal, EnrichmentSkippedTotal, BudgetCallsUsed, BudgetCallsLimit)
+	metrics.Registry.MustRegister(LLMCallsTotal, EnrichmentSkippedTotal, BudgetCallsUsed, BudgetCallsLimit, VerificationTransitionsTotal)
 }

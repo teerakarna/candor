@@ -115,6 +115,23 @@ type FindingStatus struct {
 	// +optional
 	Hypotheses []Hypothesis `json:"hypotheses,omitempty"`
 
+	// verificationOutcome is the result of the most recent re-check of this Finding's underlying
+	// signal, written by internal/signal.Ingest every time its source is reconciled - not a
+	// one-off assertion at creation time. "StillPresent" means the source was re-checked and the
+	// condition persists (true for a brand new Finding too - there's no distinct "never verified"
+	// state once the first reconcile has run). "Resolved" means the source no longer reports this
+	// condition (e.g. a Trivy VulnerabilityReport dropped to zero matching vulnerabilities, or its
+	// severity fell below every SignalPolicy's threshold) - the Finding object is kept, not
+	// deleted, as the record that it happened. "Recurred" means a Finding that was Resolved had
+	// its source produce a real signal again.
+	//
+	// Deliberately three of the design doc's four verification states, not all four: "Superseded"
+	// would apply once multiple providers can report conflicting signals about the same Finding,
+	// which doesn't happen yet - each Finding is keyed to exactly one (provider, source object).
+	// +kubebuilder:validation:Enum=StillPresent;Resolved;Recurred
+	// +optional
+	VerificationOutcome string `json:"verificationOutcome,omitempty"`
+
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -142,6 +159,7 @@ type FindingStatus struct {
 // +kubebuilder:printcolumn:name="Provider",type=string,JSONPath=".spec.source.provider"
 // +kubebuilder:printcolumn:name="Resource",type=string,JSONPath=".spec.source.name"
 // +kubebuilder:printcolumn:name="Summary",type=string,JSONPath=".spec.summary"
+// +kubebuilder:printcolumn:name="Verified",type=string,JSONPath=".status.verificationOutcome"
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=".metadata.creationTimestamp"
 
 // Finding is the Schema for the findings API
