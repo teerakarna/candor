@@ -18,6 +18,6 @@ jobs:
     # SHA-pinned to teerakarna/mkdocs-publisher's main, same discipline as every third-party
     # action in this repo (verified with `git -C <clone of mkdocs-publisher> rev-parse main`,
     # not guessed) - bump manually when that repo's workflow changes.
-    uses: teerakarna/mkdocs-publisher/.github/workflows/publish.yml@b204fcc61673d5594a343af74ddca0b6c0e35d1b # main
+    uses: teerakarna/mkdocs-publisher/.github/workflows/publish.yml@c2ac253310e1e7751babbe3b133d8716a2747ab1 # main
     with:
       working-directory: docs-site
