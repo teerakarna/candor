@@ -173,6 +173,21 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              enrichedFingerprint:
+                description: |-
+                  enrichedFingerprint is the Fingerprint value that was last successfully enriched by an LLM.
+                  Empty means never enriched. Written by the enrichment reconciler (a later slice - nothing
+                  sets this yet), never by the code that writes Spec/Fingerprint. When it differs from
+                  Fingerprint, enrichment is needed - see internal/signal.NeedsEnrichment.
+                type: string
+              fingerprint:
+                description: |-
+                  fingerprint is a content-addressed hash of this Finding's current spec, recomputed every
+                  time Spec is written (see internal/signal.Fingerprint). It is deliberately not this
+                  object's identity/name - the same source (e.g. a VulnerabilityReport) keeps updating the
+                  same Finding as its content changes over time, and Fingerprint is how that changing
+                  content gets tracked without churning object identity.
+                type: string
             type: object
         required:
         - spec

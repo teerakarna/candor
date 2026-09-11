@@ -29,8 +29,9 @@ import (
 // This is deliberately the deterministic slice of what a Finding will eventually carry (see
 // docs/design.md: "Finding ... ranked hypotheses, confidence, verification outcome"). No LLM is
 // involved yet - Summary is generated straight from the signal's own data. Fields for
-// fingerprinting, hypotheses/confidence, and verification outcome are added in later slices
-// rather than reserved here now, so the schema only ever describes what's actually implemented.
+// hypotheses/confidence and verification outcome are added in later slices rather than reserved
+// here now, so the schema only ever describes what's actually implemented. Fingerprinting
+// (docs/design.md pillar 2) is on FindingStatus, not here - see that type's doc comment for why.
 type FindingSpec struct {
 	// source identifies the signal that produced this Finding.
 	// +required
@@ -70,6 +71,21 @@ type FindingSource struct {
 
 // FindingStatus defines the observed state of Finding.
 type FindingStatus struct {
+	// fingerprint is a content-addressed hash of this Finding's current spec, recomputed every
+	// time Spec is written (see internal/signal.Fingerprint). It is deliberately not this
+	// object's identity/name - the same source (e.g. a VulnerabilityReport) keeps updating the
+	// same Finding as its content changes over time, and Fingerprint is how that changing
+	// content gets tracked without churning object identity.
+	// +optional
+	Fingerprint string `json:"fingerprint,omitempty"`
+
+	// enrichedFingerprint is the Fingerprint value that was last successfully enriched by an LLM.
+	// Empty means never enriched. Written by the enrichment reconciler (a later slice - nothing
+	// sets this yet), never by the code that writes Spec/Fingerprint. When it differs from
+	// Fingerprint, enrichment is needed - see internal/signal.NeedsEnrichment.
+	// +optional
+	EnrichedFingerprint string `json:"enrichedFingerprint,omitempty"`
+
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 

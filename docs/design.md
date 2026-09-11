@@ -126,7 +126,14 @@ are plausible later additions, not v1.
    **Done.** Identity between reconciles is currently the signal's source (provider + originating
    object), not real content-addressed fingerprinting — that's slice 3's job. Provider skips
    registering itself if the target CRD isn't installed, rather than crashing the manager.
-3. Fingerprinting + cache + the cost regression test.
+3. Fingerprinting + cache + the cost regression test. **Done**, scoped honestly to what's provable
+   without an LLM to gate yet: `Finding.status.fingerprint` (content hash) and `.enrichedFingerprint`
+   (what was last enriched) exist and are wired through `Ingest`; `NeedsEnrichment` is the gate
+   slice 4's real LLM call plugs into unchanged. No separate cache store - the Finding object's own
+   status field *is* the cache, so there's no new storage to add. The cost regression test proves
+   `NeedsEnrichment` makes exactly one true→false transition across N ingests of identical content,
+   and reverses only when content actually changes - it can't yet prove "one LLM call" literally,
+   since none exists; that's slice 4's own test, trivial once this mechanism exists to sit on.
 4. LLM enrichment (Anthropic) behind the interface; ranked hypotheses with confidence.
 5. Budget ceiling + degraded mode + self-metrics + K8s Events.
 6. `Suppression` CRD.
