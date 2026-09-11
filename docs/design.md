@@ -143,7 +143,17 @@ are plausible later additions, not v1.
    counts real (fake, interface-real) LLM calls across N reconciles, not just fingerprint
    transitions. `ANTHROPIC_API_KEY` unset is a fully supported configuration (deterministic
    findings only), not an error, matching the "provider not installed" stance from slice 2.
-5. Budget ceiling + degraded mode + self-metrics + K8s Events.
+5. Budget ceiling + degraded mode + self-metrics + K8s Events. **Done.** `SignalPolicy.spec.budget`
+   (`maxCalls`, `windowSeconds`, default 24h window) is optional - omitted means unlimited, relying
+   entirely on the slice 3/4 fingerprint gate to bound cost. `internal/signal.CheckBudget` tracks
+   usage on `SignalPolicy.status` (`budgetWindowStart`, `budgetCallsUsed`), resets on window expiry,
+   and sets a `BudgetExhausted` condition. On exhaustion, `FindingReconciler` skips the LLM call
+   (degrading to deterministic-only findings, not erroring) and emits a Warning Event on the
+   `SignalPolicy` so degradation is visible without polling status. Four Prometheus counters/gauges
+   (`internal/metrics`) expose calls made, calls skipped by reason, and budget used vs. limit per
+   policy - proven with real registered-metric assertions (`testutil.ToFloat64`), not just "the code
+   compiles". `TestFindingReconciler_BudgetCostRegression` proves a budget of 2 caps real LLM calls
+   to exactly 2 across 5 genuinely distinct Findings - the literal ceiling claim, enforced by test.
 6. `Suppression` CRD.
 7. Verification loop + published accuracy metrics + Grafana dashboard in the chart.
 8. Generic webhook sink + periodic digest report.

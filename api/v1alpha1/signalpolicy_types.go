@@ -44,10 +44,41 @@ type SignalPolicySpec struct {
 	// +kubebuilder:default=HIGH
 	// +optional
 	MinSeverity string `json:"minSeverity,omitempty"`
+
+	// budget bounds LLM enrichment spend for this policy's namespace over a rolling window.
+	// Optional - omitted means unlimited, relying entirely on the fingerprint gate (slice 3) to
+	// bound cost. When the limit is reached, enrichment degrades to deterministic-only findings
+	// until the window resets - it never silently keeps spending past the ceiling.
+	// +optional
+	Budget *Budget `json:"budget,omitempty"`
+}
+
+// Budget bounds LLM enrichment calls over a rolling window.
+type Budget struct {
+	// maxCalls is the maximum number of LLM enrichment calls allowed within one window.
+	// +kubebuilder:validation:Minimum=1
+	// +required
+	MaxCalls int32 `json:"maxCalls"`
+
+	// windowSeconds is the rolling window length. Rolling from whenever the window last reset,
+	// not calendar-aligned - simpler to reason about, no timezone/cron edge cases.
+	// +kubebuilder:validation:Minimum=60
+	// +kubebuilder:default=86400
+	// +optional
+	WindowSeconds int32 `json:"windowSeconds,omitempty"`
 }
 
 // SignalPolicyStatus defines the observed state of SignalPolicy.
 type SignalPolicyStatus struct {
+	// budgetWindowStart is when the current budget window began. Unset means no window is active
+	// yet - no enrichment call has been checked against this policy's budget since the last reset.
+	// +optional
+	BudgetWindowStart *metav1.Time `json:"budgetWindowStart,omitempty"`
+
+	// budgetCallsUsed is the number of LLM calls made within the current budget window.
+	// +optional
+	BudgetCallsUsed int32 `json:"budgetCallsUsed,omitempty"`
+
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -71,6 +102,10 @@ type SignalPolicyStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Providers",type=string,JSONPath=".spec.providers"
+// +kubebuilder:printcolumn:name="MinSeverity",type=string,JSONPath=".spec.minSeverity"
+// +kubebuilder:printcolumn:name="BudgetUsed",type=integer,JSONPath=".status.budgetCallsUsed"
+// +kubebuilder:printcolumn:name="BudgetMax",type=integer,JSONPath=".spec.budget.maxCalls"
 
 // SignalPolicy is the Schema for the signalpolicies API
 type SignalPolicy struct {

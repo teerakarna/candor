@@ -20,13 +20,16 @@ import (
 	"context"
 	"math"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
 	"github.com/teerakarna/candor/internal/llm"
+	"github.com/teerakarna/candor/internal/metrics"
 	"github.com/teerakarna/candor/internal/signal"
 )
 
@@ -45,11 +48,18 @@ type FindingReconciler struct {
 	// deterministic findings only, with no LLM cost at all, is a fully supported configuration,
 	// not a degraded one.
 	LLM llm.Client
+
+	// Recorder emits Kubernetes Events on state transitions worth an operator's attention (right
+	// now: budget exhaustion). Required if LLM is set - see SetupWithManager.
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=candor.dev,resources=findings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=candor.dev,resources=findings/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=candor.dev,resources=findings/finalizers,verbs=update
+// +kubebuilder:rbac:groups=candor.dev,resources=signalpolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=candor.dev,resources=signalpolicies/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 func (r *FindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
@@ -64,7 +74,37 @@ func (r *FindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	if !signal.NeedsEnrichment(finding) {
+		metrics.EnrichmentSkippedTotal.WithLabelValues("not_needed").Inc()
 		return ctrl.Result{}, nil
+	}
+
+	// The budget lives on whichever SignalPolicy governs this Finding's provider in its
+	// namespace - same lookup Ingest uses to decide whether to accept a signal at all. If the
+	// policy was deleted after ingest (an edge case, not the common path), there's nothing to
+	// enforce against - treated as unlimited, same as a policy with no Budget configured.
+	policy, err := signal.FindPolicy(ctx, r.Client, finding.Namespace, finding.Spec.Source.Provider)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if policy != nil {
+		allowed, err := signal.CheckBudget(ctx, r.Client, policy)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if policy.Spec.Budget != nil {
+			metrics.BudgetCallsLimit.WithLabelValues(policy.Namespace, policy.Name).Set(float64(policy.Spec.Budget.MaxCalls))
+			metrics.BudgetCallsUsed.WithLabelValues(policy.Namespace, policy.Name).Set(float64(policy.Status.BudgetCallsUsed))
+		}
+		if !allowed {
+			metrics.EnrichmentSkippedTotal.WithLabelValues("budget_exhausted").Inc()
+			// Emitted every time budget blocks a call, not just on the first transition - the
+			// Kubernetes Events API already coalesces repeated identical (object, reason)
+			// events into one Event with an incrementing count, so this doesn't spam.
+			r.Recorder.Eventf(policy, corev1.EventTypeWarning, "BudgetExhausted",
+				"enrichment for %s/%s skipped - budget exhausted (%d/%d calls this window)",
+				finding.Namespace, finding.Name, policy.Status.BudgetCallsUsed, policy.Spec.Budget.MaxCalls)
+			return ctrl.Result{}, nil
+		}
 	}
 
 	resp, err := r.LLM.Enrich(ctx, llm.Request{
@@ -75,12 +115,14 @@ func (r *FindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		Name:     finding.Spec.Source.Name,
 	})
 	if err != nil {
+		metrics.LLMCallsTotal.WithLabelValues("error").Inc()
 		// Returned as-is: controller-runtime requeues failed reconciles with its own
 		// exponential backoff, so a transient API error (rate limit, timeout) retries on its
 		// own without this needing to hand-roll that.
 		log.Error(err, "LLM enrichment failed")
 		return ctrl.Result{}, err
 	}
+	metrics.LLMCallsTotal.WithLabelValues("success").Inc()
 
 	finding.Status.Hypotheses = toHypotheses(resp.Hypotheses)
 	finding.Status.EnrichedFingerprint = finding.Status.Fingerprint
@@ -108,6 +150,15 @@ func toHypotheses(in []llm.Hypothesis) []candorv1alpha1.Hypothesis {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *FindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Recorder == nil {
+		// GetEventRecorderFor is deprecated in favour of GetEventRecorder (the events.k8s.io/v1
+		// API), but controller-runtime's own internal.go still calls it internally with the same
+		// suppression - the old client-go record.EventRecorder is what every reference
+		// controller in the ecosystem still uses, and migrating buys nothing right now against a
+		// "not yet removed" warning. Worth revisiting if it's ever actually scheduled for
+		// removal.
+		r.Recorder = mgr.GetEventRecorderFor("candor") //nolint:staticcheck
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&candorv1alpha1.Finding{}).
 		Named("finding").
