@@ -15,3 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - First signal provider: Trivy Operator `VulnerabilityReport` → `Finding`, gated by a
   `SignalPolicy` in the same namespace. Read-only RBAC on the external CRD; skips registering
   itself (rather than crashing the manager) if Trivy Operator isn't installed.
+- Content-addressed fingerprinting (`Finding.status.fingerprint`): the core cost-accountability
+  mechanism (docs/design.md pillar 2). Re-ingesting unchanged content never looks new, and content
+  actually changing makes a settled Finding "need enrichment" again. No LLM call exists yet to
+  gate (slice 4) - this slice proves the mechanism the real gate gets built directly on top of.

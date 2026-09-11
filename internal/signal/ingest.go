@@ -76,6 +76,19 @@ func Ingest(ctx context.Context, c client.Client, scheme *runtime.Scheme, sig Si
 		return "", fmt.Errorf("upserting Finding %s/%s: %w", sig.Namespace, finding.Name, err)
 	}
 
+	// Fingerprint is a status field, and status is a separate subresource on Finding - the
+	// CreateOrUpdate above never persists it, so it needs its own write. Skipped when the value
+	// is already correct, both to avoid a needless resourceVersion bump on every reconcile of
+	// truly unchanged content, and because that "no write for no change" property is the same
+	// cost-consciousness this whole mechanism exists to enforce on the (later) LLM call it gates.
+	fp := Fingerprint(sig)
+	if finding.Status.Fingerprint != fp {
+		finding.Status.Fingerprint = fp
+		if err := c.Status().Update(ctx, finding); err != nil {
+			return "", fmt.Errorf("updating Fingerprint status on Finding %s/%s: %w", sig.Namespace, finding.Name, err)
+		}
+	}
+
 	switch result {
 	case controllerutil.OperationResultCreated:
 		return ResultCreated, nil
@@ -110,12 +123,13 @@ func providerEnabled(providers []string, provider string) bool {
 	return slices.Contains(providers, provider)
 }
 
-// findingName derives a stable Finding object name from the signal's source identity, so
-// re-ingesting the same signal updates one object instead of creating duplicates. This is a
-// deliberately simple interim identity scheme, not the real content-addressed fingerprinting the
-// design doc describes (docs/design.md pillar 2) - that lands in a later slice, keyed off the
-// signal's actual content so it changes when the underlying state does. Until then, identity is
-// keyed off *what produced the signal*, not what it says.
+// findingName derives a stable Finding object name from the signal's source identity (not its
+// content), so re-ingesting from the same source updates one object instead of creating
+// duplicates as its content changes over time. This is deliberately not the content-addressed
+// fingerprint from docs/design.md pillar 2 - that's Fingerprint, stored on Status (see
+// fingerprint.go), and it changes when content changes precisely so it can gate enrichment and
+// let a suppressed Finding resurface. Object identity and content fingerprint answer different
+// questions on purpose: "which Finding is this" vs. "has this exact content been seen before."
 func findingName(sig Signal) string {
 	h := sha256.Sum256([]byte(sig.Provider + "/" + sig.RefKind + "/" + sig.RefName))
 	return fmt.Sprintf("%s-%s", sig.Provider, hex.EncodeToString(h[:])[:12])
