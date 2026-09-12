@@ -49,15 +49,27 @@ Given that, being *better* than these — not merely different — is the only d
 
 ## The eight gaps, and how Candor answers them
 
+> **Citations re-verified 2026-09-12**, prompted by drafting a public blog post off this doc.
+> Scope of that check: this gaps table, and the "trust problem" section below it. Four claims were
+> wrong or overstated and are corrected in place, marked inline. Two could not be verified at all
+> and were replaced with the weaker claim that *is* supported.
+>
+> **Not re-verified**: the "Origin and prior art" section above (only repo descriptions and star
+> counts were spot-checked, not the specific claims about Kubernaut's internals or roadmap, some of
+> which are time-sensitive), and the Palark review in row 8.
+>
+> The lesson is worth keeping: an evidence base decays. Issues get fixed and closed, and projects
+> ship the thing you said they never shipped. **Re-check before citing any of this publicly.**
+
 | # | Gap in the incumbents (evidenced) | Candor's answer |
 |---|---|---|
-| 1 | No cost model. k8sgpt-operator#769: 164 findings → 9,300 Bedrock calls in 3 days. #730: analysis runs every reconcile (~30s) regardless of configured interval, no last-analysis tracking. #419 (decouple LLM spend from reconciles) closed as stale. | Content-addressed fingerprinting: hash (resource identity + relevant spec/status subset + analyzer verdict). LLM invoked **once per distinct fingerprint, ever**. Hard budget ceiling per window; on exhaustion, degrade to deterministic-only and say so. |
+| 1 | No cost model. k8sgpt-operator#769 (open): hourly scan configured, 164 findings, ~9,300 Bedrock calls in 3 days per CloudTrail. #730 (fixed Feb 2026): the mechanism behind that class of problem: change detection compared result hashes, found them identical, and updated anyway. Note the interval itself *was* being respected; the earlier claim here that it was ignored was wrong, corrected 2026-09-12 on re-verification. #419 (decouple LLM request timing from reconciles) sat 2+ years, closed Aug 2026 with "Closing as stale ... not on the current roadmap." | Content-addressed fingerprinting: hash (resource identity + relevant spec/status subset + analyzer verdict). LLM invoked **once per distinct fingerprint, ever**. Hard budget ceiling per window; on exhaustion, degrade to deterministic-only and say so. |
 | 2 | No deduplication — an alert storm costs N× | Fingerprint collapses a storm to one enrichment call. |
-| 3 | No suppression, so the tool recreates the fatigue it claims to fix. k8sgpt#372 ("Exclude a list of known issues") open since May 2023, never shipped: "We have no consensus on the design yet." | `Suppression` CRD mutes a fingerprint with a required reason and optional expiry. Exact by construction — if the underlying state changes, the fingerprint changes and the finding resurfaces on its own. |
-| 4 | No verification of remediation outcomes. k8sgpt's own `AUTO_REMEDIATION.md` lists "Re-analysis proving findings are resolved" as not implemented. | Every finding carries a verification outcome (resolved / still-present / recurred / superseded), re-checked after state changes, exposed as metrics and status. |
-| 5 | Writes to the cluster — breaks GitOps shops. Practitioner: "my FluxCD is going revert since you violated principle of 'All goes through GitOps'." | Default write path is a **pull request** against the GitOps repo. Direct mutation only for resources not under GitOps management, gated behind Enforcing mode. |
+| 3 | No suppression, so the tool recreates the fatigue it claims to fix. k8sgpt#372 ("Exclude a list of known issues") open since May 2023, still open, never shipped. Maintainer, ten days in: "We have no concensus on the design yet, do you want to propose something first?" (sic). A contributor offered a draft proposal; it never landed. Users were still asking in 2025. | `Suppression` CRD mutes a fingerprint with a required reason and optional expiry. Exact by construction — if the underlying state changes, the fingerprint changes and the finding resurfaces on its own. |
+| 4 | Verification of remediation outcomes is partial. k8sgpt-operator's `AUTO_REMEDIATION.md` checks Deployment rollout + replica availability before treating a finding as resolved, but lists "targeted re-analysis that proves the original finding is resolved" as future work, and states "a missing `Result` remains the finding-resolution signal", i.e. absence of a complaint is the proof. (Corrected 2026-09-12: the earlier claim that nothing is checked at all overstated this.) | Every finding carries a verification outcome (resolved / still-present / recurred / superseded), re-checked after state changes, exposed as metrics and status. |
+| 5 | Writes to the cluster, which breaks GitOps shops. Structural, not anecdotal: Flux and ArgoCD revert drift from Git by design, so a direct cluster patch means two automated systems fighting over the same object. (A practitioner quote previously cited here could not be re-verified on 2026-09-12 and was removed; the structural argument stands on its own and needs no quote.) | Default write path is a **pull request** against the GitOps repo. Direct mutation only for resources not under GitOps management, gated behind Enforcing mode. |
 | 6 | Prompt injection unaddressed, in a security tool | All ingested telemetry is untrusted input. Structured extraction before prompting; model output selects from a **fixed action catalog** — it can never emit a free-form action. |
-| 7 | Weakest model shipped as default. arXiv 2509.04191 (the KubeGuard paper) benchmarks Llama-3.1-8B at 0.79–0.81 F1 vs GPT-4o at 0.93–1.00 on exactly these manifest-analysis tasks. | Strong hosted model (Anthropic) as the v1 default. Per-model accuracy is measured and published against a fixture suite, not asserted. |
+| 7 | Weakest model shipped as default. arXiv 2509.04191 (the KubeGuard paper) benchmarks both on exactly these manifest-analysis tasks. GPT-4o: 0.929-1.00 F1 across the five tasks. Llama-3.1-8B: **0.504-0.808**, worst on NetworkPolicy Refinement (0.504 vs 0.961) and Role Creation (0.607 vs 1.00). (Corrected 2026-09-12: the earlier "0.79-0.81" figure cited here took only the model's two best scores and understated the real gap.) | Strong hosted model (Anthropic) as the v1 default. Per-model accuracy is measured and published against a fixture suite, not asserted. |
 | 8 | No confidence modelling, no self-metrics, no least-privilege RBAC. Palark's k8sgpt review: non-deterministic recommendations across identical runs; once suggested rebooting the cluster; missed an initContainer `ErrImagePull`. | Ranked competing hypotheses with confidence, never one asserted cause. Full self-observability. Operator ServiceAccount is least-privilege, read-only by default, verified by a test that attempts a write and confirms denial. |
 
 Plus a plain operational advantage: Kubernaut needs 9+ microservices. Candor is one operator binary
@@ -68,15 +80,23 @@ and a Helm chart — a difference in deployment and maintenance burden that user
 - Majors & Hebert, SREcon25, ["AIOps: Prove It!"](https://www.usenix.org/conference/srecon25americas/presentation/majors) —
   an open letter asking vendors for "data on how often your system produces useful, actionable
   results." No OSS tool in this space has answered it.
-- The Register (696 respondents): 60% cite lack of trust as the top AIOps adoption barrier, 59%
-  require near-perfect accuracy before adoption. DevOps.com: only 12% use AIOps day-to-day, 7.5%
-  call it high-value.
+- The Register with NeuBird AI, April 2026 (696 respondents): 60% cite lack of trust as the top
+  AIOps adoption barrier (ROI, security and data quality each ~12-13%), 59% require near-perfect
+  accuracy before adoption, and adoption matches that: 73% not using AIOps at all, 19% piloting,
+  8% in production. (A "12% use AIOps day-to-day / 7.5% call it high-value" figure previously cited
+  here could not be verified on 2026-09-12 and was replaced with these, which were.)
 - "A single confident answer that's wrong is worse than no answer, because it sends a human down a
-  road with the agent's credibility behind it." (HN, HyperProbe thread)
-- LangChain's own lesson, cited approvingly here: a health check fanned out to ~20 Sonnet calls per
-  run even when healthy; collapsing to one Haiku call cut cost 95–99% with no loss in detection.
-  Candor's fingerprinting generalizes this fix structurally rather than requiring each integration to
-  discover it independently.
+  road with the agent's credibility behind it." Commenter IgorVoytyuk on the
+  [HyperProbe Launch HN thread](https://news.ycombinator.com/item?id=49185389), describing three
+  incidents where confident-but-wrong diagnoses burned real debugging time. Verified verbatim
+  2026-09-12.
+- Model-routing economics generally: sending simple, deterministic checks to a cheap model and
+  reserving the expensive one for reasoning-heavy work is widely reported to cut cost by roughly
+  95%. (A specific LangChain anecdote previously cited here, "~20 Sonnet calls per health check
+  run, collapsed to one Haiku call", could not be re-verified on 2026-09-12 and has been reduced
+  to the general, corroborated claim. **Do not cite the specific version publicly without finding
+  the source first.**) Candor's fingerprinting attacks the same cost problem structurally, so each
+  integration does not have to rediscover it.
 
 ## Interaction surfaces
 
