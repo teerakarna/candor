@@ -41,6 +41,32 @@ change that touches these:
 - **Every finding is falsifiable.** A new finding type needs a defined verification check — "how do
   we know this cleared" — before it ships.
 
+## Recording findings
+
+Chat history is not a record, and a finding nobody wrote down did not happen. The test for where a
+finding belongs is whether it survives the session somewhere durable.
+
+| Situation | Where it goes |
+|---|---|
+| Fixed in the same change | No issue. The PR description and commit message are the record, and a better one, because they carry the fix and the evidence together |
+| Found, but deferred | An issue, always. Otherwise it exists only in a conversation nobody will re-read |
+| Found, won't fix, or the call belongs to someone else | An issue, for the same reason |
+| Recurring, or it should shape future work | A design-doc section or constraint, not an issue |
+
+Do not open an issue per observation. Answering "too much to keep track of" by producing more to
+keep track of is the failure "Every accelerator ships with its brake" exists to prevent, and it
+applies to the issue tracker as readily as to the code.
+
+Include the measurement, not the impression. Two worked examples from this repo's own history: the
+KubeGuard paper's F1 range was cited as 0.79-0.81 when the real range is 0.504-0.808, and the
+citation for k8sgpt-operator#730 described a bug that had since been fixed. Both were caught by
+re-checking against the live source, and both are recorded in `docs/design.md` with the correction
+marked inline rather than quietly edited.
+
+**Evidence decays.** Issues get fixed, projects ship the thing you said they never shipped, and
+papers say something narrower than the summary of them. Anything cited publicly gets re-verified
+first.
+
 ## Commit style
 
 Conventional commits (`feat:`, `fix:`, `docs:`, `chore:`) where practical.
