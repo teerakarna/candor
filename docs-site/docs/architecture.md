@@ -19,17 +19,8 @@ already interact with Kubernetes:
 
 ## How a signal becomes a Finding
 
-```mermaid
-flowchart LR
-    A[Provider<br/>e.g. Trivy VulnerabilityReport] --> B[Signal]
-    B --> C{SignalPolicy<br/>accepts it?}
-    C -- no --> D[Filtered /<br/>resolves a stale Finding]
-    C -- yes --> E[Finding created/updated]
-    E --> F{Fingerprint<br/>changed?}
-    F -- no --> G[No LLM call]
-    F -- yes --> H[LLM enrichment,<br/>gated by budget]
-    H --> I[Ranked hypotheses<br/>+ confidence]
-```
+![How a signal becomes a Finding](assets/architecture-flow.svg)
+*Click to expand.*
 
 - **Signal providers** — a Go interface normalizing heterogeneous input into a common `Signal`.
   Ships with Trivy `VulnerabilityReport` CRs; a generic webhook receiver and additional providers
