@@ -32,6 +32,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -40,6 +41,7 @@ import (
 	"github.com/teerakarna/candor/internal/controller"
 	"github.com/teerakarna/candor/internal/llm"
 	"github.com/teerakarna/candor/internal/llm/anthropic"
+	"github.com/teerakarna/candor/internal/metrics"
 	"github.com/teerakarna/candor/internal/provider"
 	"github.com/teerakarna/candor/internal/provider/trivy"
 	// +kubebuilder:scaffold:imports
@@ -186,6 +188,12 @@ func main() {
 		setupLog.Error(err, "Failed to start manager")
 		os.Exit(1)
 	}
+
+	// A collector, not a package-level metric var like the rest of internal/metrics - it computes
+	// candor_findings_current fresh from the manager's cached client on every scrape, the same
+	// pattern kube-state-metrics uses for "current count of X" metrics a plain counter can't
+	// express correctly.
+	ctrlmetrics.Registry.MustRegister(&metrics.FindingsCollector{Reader: mgr.GetClient()})
 
 	if err := (&controller.SignalPolicyReconciler{
 		Client: mgr.GetClient(),

@@ -195,6 +195,32 @@ are plausible later additions, not v1.
    schema validation - Grafana's save API doesn't reject a bad panel type or query), and
    `hack/grafana-preview/` is a local `docker compose` stack (fake metrics + Prometheus + Grafana,
    both auto-provisioned) for a human visual check without a real cluster.
+
+   Redesigned after review: the original layout led with Candor's own cost/self-observability
+   metrics, which reads as "look how efficient we are" rather than answering the question an
+   operator actually opens the dashboard for - what needs attention, right now. Fixing that
+   exposed a real gap: none of the existing metrics represent a live current count of Findings by
+   severity, only transition counters. Added `candor_findings_current{namespace,severity,outcome}`
+   as a Prometheus `Collector` (`internal/metrics.FindingsCollector`) - computed fresh from the
+   manager's cached client on every scrape, the same reasoning kube-state-metrics is built on,
+   since a plain counter can't correctly express "how many are open right now" (transitions don't
+   net out to a current count). `candor_verification_transitions_total` also gained a `severity`
+   label (previously `outcome` only) - refined several times more after review. Each severity
+   tile shows three values together (Outstanding, Resolved (7d), Recurred (7d)) rather than a
+   separate panel per concept, since an operator wants one place per severity to answer "does this
+   need action or is it handled" - "Recurred", not "Recurring", to match the past-tense,
+   discrete-event framing of "Resolved" and the underlying `VerificationRecurred` constant, not an
+   ongoing state. Laid out as four tiles side by side (one per severity), each internally split
+   into three stacked horizontal bands - not a single multi-value stat panel, since Grafana's own
+   "vertical orientation" setting did not reliably stack multiple values the way its documentation
+   describes; explicit per-value panels positioned via grid coordinates give deterministic control
+   instead of relying on that. Also fixed two real bugs caught in review: the multi-value stat
+   panels were issuing range queries while asking to display every returned value, rendering as a
+   wall of one box per timestamp sample instead of one current number (fixed with `instant: true`
+   on every such target); and `Resolved`/`Recurred` counts wrapped in `floor()`, not left to round
+   naturally, since `increase()` over a partial window can extrapolate a fractional value and
+   rounding up would claim an event happened that isn't actually confirmed. The original drill-down
+   panels remain, grouped under labelled rows.
 8. Generic webhook sink + periodic digest report. **Done.** `SignalPolicy.spec.webhook.url`
    (optional) is the single opt-in for both: `internal/notify` is a small, vendor-agnostic package
    that POSTs a JSON payload and knows nothing about Slack/Teams/PagerDuty - "one code path", per
