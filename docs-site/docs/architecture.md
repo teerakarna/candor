@@ -2,9 +2,9 @@
 
 ## Interaction surfaces
 
-Candor has no web UI, by design — the projects in this space that built a bespoke UI (kagent,
-Keep, NudgeBee) became multi-service platforms, exactly the complexity this project exists to
-avoid. You interact with it the way you already interact with Kubernetes:
+Candor has no web UI, by design — a bespoke UI tends to pull a project toward a multi-service
+platform, which is complexity this project deliberately avoids. You interact with it the way you
+already interact with Kubernetes:
 
 - **`Finding` CRD status** — the primary surface. `kubectl get findings`.
 - **Prometheus `/metrics`** — findings raised/suppressed/verified/recurred, LLM calls, spend vs.
