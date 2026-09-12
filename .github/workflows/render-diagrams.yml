@@ -56,8 +56,12 @@ jobs:
           if git diff --staged --quiet; then
             echo "No artifact changes - already in sync."
           else
-            # [skip ci] avoids re-triggering this workflow (and every other push-triggered one)
-            # on the commit it just made.
-            git commit -m "chore(diagrams): render architecture diagrams [skip ci]"
+            # Deliberately no [skip ci]: GitHub treats that as "run nothing" for the push, which
+            # wipes out every other required status check on this new commit and blocks merging
+            # under branch protection - a real problem hit on this repo's very first PR through
+            # this workflow. Not needed for loop prevention either: this commit only touches
+            # *.svg, which doesn't match this workflow's own path filters (*.mmd and this file),
+            # so it can't retrigger itself regardless.
+            git commit -m "chore(diagrams): render architecture diagrams"
             git push
           fi
