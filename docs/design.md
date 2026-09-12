@@ -205,13 +205,22 @@ are plausible later additions, not v1.
    manager's cached client on every scrape, the same reasoning kube-state-metrics is built on,
    since a plain counter can't correctly express "how many are open right now" (transitions don't
    net out to a current count). `candor_verification_transitions_total` also gained a `severity`
-   label (previously `outcome` only) - refined twice more after review: each severity tile shows
-   three values together (Outstanding, Resolved (7d), Recurring (7d)) rather than a separate panel
-   per concept, since an operator wants one place per severity to answer "does this need action or
-   is it handled". Also fixed a real rendering bug caught in review: the multi-value stat panels
-   were issuing range queries while asking to display every returned value, which rendered as a
-   wall of one box per timestamp sample instead of one current number - fixed by marking every
-   such target `instant: true`. The original drill-down panels remain, grouped under labelled rows.
+   label (previously `outcome` only) - refined several times more after review. Each severity
+   tile shows three values together (Outstanding, Resolved (7d), Recurred (7d)) rather than a
+   separate panel per concept, since an operator wants one place per severity to answer "does this
+   need action or is it handled" - "Recurred", not "Recurring", to match the past-tense,
+   discrete-event framing of "Resolved" and the underlying `VerificationRecurred` constant, not an
+   ongoing state. Laid out as four tiles side by side (one per severity), each internally split
+   into three stacked horizontal bands - not a single multi-value stat panel, since Grafana's own
+   "vertical orientation" setting did not reliably stack multiple values the way its documentation
+   describes; explicit per-value panels positioned via grid coordinates give deterministic control
+   instead of relying on that. Also fixed two real bugs caught in review: the multi-value stat
+   panels were issuing range queries while asking to display every returned value, rendering as a
+   wall of one box per timestamp sample instead of one current number (fixed with `instant: true`
+   on every such target); and `Resolved`/`Recurred` counts wrapped in `floor()`, not left to round
+   naturally, since `increase()` over a partial window can extrapolate a fractional value and
+   rounding up would claim an event happened that isn't actually confirmed. The original drill-down
+   panels remain, grouped under labelled rows.
 8. Generic webhook sink + periodic digest report. **Done.** `SignalPolicy.spec.webhook.url`
    (optional) is the single opt-in for both: `internal/notify` is a small, vendor-agnostic package
    that POSTs a JSON payload and knows nothing about Slack/Teams/PagerDuty - "one code path", per

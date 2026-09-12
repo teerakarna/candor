@@ -64,11 +64,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `candor_verification_transitions_total` now also carries a `severity` label (previously
   `outcome` only), so Resolved/Recurred can be broken down per severity, not just in aggregate.
 - Redesigned Grafana dashboard: leads with four colour-coded severity tiles (Critical/High/Medium/
-  Low), each showing Outstanding, Resolved (7d), and Recurring (7d) together - so the first thing
-  an operator sees is what needs action, what's been taken care of, and what's come back, not
-  Candor's own cost metrics. Historical trends and cost/operator-health panels (LLM calls, budget
-  usage, enrichment-avoidance ratio) are still present, grouped under labelled rows, as drill-down
-  rather than the first view.
+  Low), each split into three stacked bands - Outstanding, Resolved (7d), Recurred (7d) - so the
+  first thing an operator sees is what needs action, what's been taken care of, and what's come
+  back, not Candor's own cost metrics. `Resolved`/`Recurred` counts are floored (`floor(...)`),
+  not rounded: `increase()` over a partial window can extrapolate a fractional value, and rounding
+  up would claim an event happened that isn't actually confirmed yet. Historical trends and
+  cost/operator-health panels (LLM calls, budget usage, enrichment-avoidance ratio) are still
+  present, grouped under labelled rows, as drill-down rather than the first view.
 
 ### Fixed
 
