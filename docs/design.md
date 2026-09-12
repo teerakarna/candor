@@ -15,20 +15,43 @@ is an architectural stance, not a feature list.
 This project's first draft was a spec for "KubeGuard" — provider-pattern signal ingestion (K8s
 events, Trivy, Falco, Wiz, Prisma Cloud, Datadog CWS), a pluggable local/hosted LLM abstraction,
 non-destructive quarantine, circuit breakers, and phased GitOps auto-remediation. That name collides
-with an existing enterprise product, an AppsCode auth tool, and an arXiv paper — renamed to Candor.
+with three things, renamed to Candor: AppsCode's Guard
+([kubeguard.dev](https://kubeguard.dev/), a Kubernetes auth webhook with a commercial offering),
+a separate Java/Spring security scanner on GitHub, and
+[arXiv 2509.04191](https://arxiv.org/abs/2509.04191), a paper on LLM-assisted Kubernetes hardening.
+The earlier phrasing here listed "an enterprise product" and "an AppsCode auth tool" as separate
+collisions; they are the same project.
 
-Research before building found the exact job already has direct competitors:
+Research before building found the exact job already has direct competitors.
 
-- **[Kubernaut](https://github.com/jordigilh/kubernaut)** — closest analogue. Alert → LLM
-  investigation → remediation, with an effectiveness monitor that scores whether fixes worked. The
-  only OSS project with an outcome feedback loop, but it's deferred to V1.1 pending 8+ weeks of
-  data, and is currently blocked by an unrelated TLS bug.
+> **Re-verified 2026-09-12.** This section was excluded from the gaps table's earlier verification
+> pass and had decayed badly. The Kubernaut entry was substantively wrong, and the HolmesGPT quote
+> was misattributed. Both corrected in place below.
+
+- **[Kubernaut](https://github.com/jordigilh/kubernaut)** — closest analogue. Alert, LLM
+  investigation, remediation, with approval gates, OPA policies and audit trails.
+  **Its effectiveness monitor is no longer deferred.** DD-017 v1.0 (Dec 2025) deferred it entirely
+  to V1.1, which is what this doc previously recorded. DD-017 v2.0 (Feb 2026) reversed that:
+  **Level 1 (automated assessment) moved into V1.0 and has shipped**; only Level 2 (AI-powered
+  analysis) remains V1.1, and it is Level 2 alone that needs 8+ weeks of remediation data. The
+  project is at v1.6.0-rc12 (2026-09-11) and pushed to daily.
+  The previous claim that it was "currently blocked by an unrelated TLS bug" is unsupported: the
+  TLS items in its tracker are feature work (TLS-only listeners, mTLS ACLs), not a blocker.
+  The previous claim that it is "the only OSS project with an outcome feedback loop" is an
+  exclusivity assertion that was never verifiable and is dropped.
+
+  **This weakens gap 4 below.** A competitor has shipped automated post-remediation effectiveness
+  assessment. Candor's verification loop is no longer a differentiator by existence, only by shape
+  (published as a metric, per-finding, in a single binary). Say that, not more.
 - **[k8sgpt](https://github.com/k8sgpt-ai/k8sgpt) /
   [k8sgpt-operator](https://github.com/k8sgpt-ai/k8sgpt-operator)** — CNCF Sandbox, ~8k stars,
   actively maintained. Deterministic analyzers + LLM explanation. Its own issue tracker is the
   primary evidence base below.
-- **[HolmesGPT](https://github.com/HolmesGPT/holmesgpt)** — read-only investigation, strongest
-  runbook integration in the field. Its own finding: "without runbooks, the model just guesses."
+- **[HolmesGPT](https://github.com/HolmesGPT/holmesgpt)** — read-only investigation, strong runbook
+  integration, and a CNCF Sandbox project. "Without runbooks, the model just guesses" is a real
+  quote and a good one, but it is **not HolmesGPT's own finding**, as this doc previously claimed:
+  it comes from an SRE team at STCLab writing on the CNCF blog about running HolmesGPT against
+  production EKS clusters. Attribute it to them, not to the project.
 - **[kagent](https://github.com/kagent-dev/kagent)** — generic agent runtime, not a remediation
   product. Its human-in-the-loop writeup states the safety line this project also follows: "Fully
   autonomous agents are fine for read-only operations. For anything that changes state, you need a
@@ -66,7 +89,7 @@ Given that, being *better* than these — not merely different — is the only d
 | 1 | No cost model. k8sgpt-operator#769 (open): hourly scan configured, 164 findings, ~9,300 Bedrock calls in 3 days per CloudTrail. #730 (fixed Feb 2026): the mechanism behind that class of problem: change detection compared result hashes, found them identical, and updated anyway. Note the interval itself *was* being respected; the earlier claim here that it was ignored was wrong, corrected 2026-09-12 on re-verification. #419 (decouple LLM request timing from reconciles) sat 2+ years, closed Aug 2026 with "Closing as stale ... not on the current roadmap." | Content-addressed fingerprinting: hash (resource identity + relevant spec/status subset + analyzer verdict). LLM invoked **once per distinct fingerprint, ever**. Hard budget ceiling per window; on exhaustion, degrade to deterministic-only and say so. |
 | 2 | No deduplication — an alert storm costs N× | Fingerprint collapses a storm to one enrichment call. |
 | 3 | No suppression, so the tool recreates the fatigue it claims to fix. k8sgpt#372 ("Exclude a list of known issues") open since May 2023, still open, never shipped. Maintainer, ten days in: "We have no concensus on the design yet, do you want to propose something first?" (sic). A contributor offered a draft proposal; it never landed. Users were still asking in 2025. | `Suppression` CRD mutes a fingerprint with a required reason and optional expiry. Exact by construction — if the underlying state changes, the fingerprint changes and the finding resurfaces on its own. |
-| 4 | Verification of remediation outcomes is partial. k8sgpt-operator's `AUTO_REMEDIATION.md` checks Deployment rollout + replica availability before treating a finding as resolved, but lists "targeted re-analysis that proves the original finding is resolved" as future work, and states "a missing `Result` remains the finding-resolution signal", i.e. absence of a complaint is the proof. (Corrected 2026-09-12: the earlier claim that nothing is checked at all overstated this.) | Every finding carries a verification outcome (resolved / still-present / recurred / superseded), re-checked after state changes, exposed as metrics and status. |
+| 4 | Verification of remediation outcomes is partial, and this gap has narrowed since it was written (see "Origin and prior art": Kubernaut shipped Level 1 automated effectiveness assessment in V1.0, Feb 2026). k8sgpt-operator's `AUTO_REMEDIATION.md` checks Deployment rollout + replica availability before treating a finding as resolved, but lists "targeted re-analysis that proves the original finding is resolved" as future work, and states "a missing `Result` remains the finding-resolution signal", i.e. absence of a complaint is the proof. (Corrected 2026-09-12: the earlier claim that nothing is checked at all overstated this.) | Every finding carries a verification outcome (resolved / still-present / recurred / superseded), re-checked after state changes, exposed as metrics and status. |
 | 5 | Writes to the cluster, which breaks GitOps shops. Structural, not anecdotal: Flux and ArgoCD revert drift from Git by design, so a direct cluster patch means two automated systems fighting over the same object. (A practitioner quote previously cited here could not be re-verified on 2026-09-12 and was removed; the structural argument stands on its own and needs no quote.) | Default write path is a **pull request** against the GitOps repo. Direct mutation only for resources not under GitOps management, gated behind Enforcing mode. |
 | 6 | Prompt injection unaddressed, in a security tool | All ingested telemetry is untrusted input. Structured extraction before prompting; model output selects from a **fixed action catalog** — it can never emit a free-form action. |
 | 7 | Weakest model shipped as default. arXiv 2509.04191 (the KubeGuard paper) benchmarks both on exactly these manifest-analysis tasks. GPT-4o: 0.929-1.00 F1 across the five tasks. Llama-3.1-8B: **0.504-0.808**, worst on NetworkPolicy Refinement (0.504 vs 0.961) and Role Creation (0.607 vs 1.00). (Corrected 2026-09-12: the earlier "0.79-0.81" figure cited here took only the model's two best scores and understated the real gap.) | Strong hosted model (Anthropic) as the v1 default. Per-model accuracy is measured and published against a fixture suite, not asserted. |
