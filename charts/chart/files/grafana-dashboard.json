@@ -25,7 +25,7 @@
     {
       "id": 20,
       "title": "Findings Status",
-      "description": "What needs attention right now, and what's been taken care of. Open (top) is candor_findings_current, a live count recomputed on every scrape; Resolved (bottom) is a 7-day total.",
+      "description": "What needs attention right now, and what's been taken care of, per severity. Outstanding is candor_findings_current, a live count recomputed on every scrape; Resolved and Recurring are 7-day totals.",
       "type": "row",
       "collapsed": false,
       "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
@@ -34,93 +34,85 @@
     {
       "id": 11,
       "title": "Critical",
-      "description": "Open: candor_findings_current{severity=\"CRITICAL\"}, excluding Resolved. Resolved: candor_verification_transitions_total{outcome=\"resolved\",severity=\"CRITICAL\"} over 7 days.",
+      "description": "Outstanding: candor_findings_current{severity=\"CRITICAL\"}, excluding Resolved. Resolved / Recurring: candor_verification_transitions_total{severity=\"CRITICAL\"} over 7 days.",
       "type": "stat",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "x": 0, "y": 1, "w": 6, "h": 8 },
+      "gridPos": { "x": 0, "y": 1, "w": 6, "h": 10 },
       "fieldConfig": {
         "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "Resolved (7d)" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] }
+          { "matcher": { "id": "byName", "options": "Resolved (7d)" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+          { "matcher": { "id": "byName", "options": "Recurring (7d)" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }] }
         ]
       },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true }, "orientation": "vertical", "textMode": "value_and_name", "colorMode": "background" },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(candor_findings_current{severity=\"CRITICAL\", outcome!=\"Resolved\"}) or vector(0)", "legendFormat": "Open" },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"resolved\", severity=\"CRITICAL\"}[7d])) or vector(0)", "legendFormat": "Resolved (7d)" }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "instant": true, "range": false, "expr": "sum(candor_findings_current{severity=\"CRITICAL\", outcome!=\"Resolved\"}) or vector(0)", "legendFormat": "Outstanding" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "instant": true, "range": false, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"resolved\", severity=\"CRITICAL\"}[7d])) or vector(0)", "legendFormat": "Resolved (7d)" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "instant": true, "range": false, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"recurred\", severity=\"CRITICAL\"}[7d])) or vector(0)", "legendFormat": "Recurring (7d)" }
       ]
     },
     {
       "id": 12,
       "title": "High",
-      "description": "Open: candor_findings_current{severity=\"HIGH\"}, excluding Resolved. Resolved: candor_verification_transitions_total{outcome=\"resolved\",severity=\"HIGH\"} over 7 days.",
+      "description": "Outstanding: candor_findings_current{severity=\"HIGH\"}, excluding Resolved. Resolved / Recurring: candor_verification_transitions_total{severity=\"HIGH\"} over 7 days.",
       "type": "stat",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "x": 6, "y": 1, "w": 6, "h": 8 },
+      "gridPos": { "x": 6, "y": 1, "w": 6, "h": 10 },
       "fieldConfig": {
         "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] } },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "Resolved (7d)" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] }
+          { "matcher": { "id": "byName", "options": "Resolved (7d)" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+          { "matcher": { "id": "byName", "options": "Recurring (7d)" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }] }
         ]
       },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true }, "orientation": "vertical", "textMode": "value_and_name", "colorMode": "background" },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(candor_findings_current{severity=\"HIGH\", outcome!=\"Resolved\"}) or vector(0)", "legendFormat": "Open" },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"resolved\", severity=\"HIGH\"}[7d])) or vector(0)", "legendFormat": "Resolved (7d)" }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "instant": true, "range": false, "expr": "sum(candor_findings_current{severity=\"HIGH\", outcome!=\"Resolved\"}) or vector(0)", "legendFormat": "Outstanding" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "instant": true, "range": false, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"resolved\", severity=\"HIGH\"}[7d])) or vector(0)", "legendFormat": "Resolved (7d)" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "instant": true, "range": false, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"recurred\", severity=\"HIGH\"}[7d])) or vector(0)", "legendFormat": "Recurring (7d)" }
       ]
     },
     {
       "id": 13,
       "title": "Medium",
-      "description": "Open: candor_findings_current{severity=\"MEDIUM\"}, excluding Resolved. Resolved: candor_verification_transitions_total{outcome=\"resolved\",severity=\"MEDIUM\"} over 7 days.",
+      "description": "Outstanding: candor_findings_current{severity=\"MEDIUM\"}, excluding Resolved. Resolved / Recurring: candor_verification_transitions_total{severity=\"MEDIUM\"} over 7 days.",
       "type": "stat",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "x": 12, "y": 1, "w": 6, "h": 8 },
+      "gridPos": { "x": 12, "y": 1, "w": 6, "h": 10 },
       "fieldConfig": {
         "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }] } },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "Resolved (7d)" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] }
+          { "matcher": { "id": "byName", "options": "Resolved (7d)" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+          { "matcher": { "id": "byName", "options": "Recurring (7d)" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }] }
         ]
       },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true }, "orientation": "vertical", "textMode": "value_and_name", "colorMode": "background" },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(candor_findings_current{severity=\"MEDIUM\", outcome!=\"Resolved\"}) or vector(0)", "legendFormat": "Open" },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"resolved\", severity=\"MEDIUM\"}[7d])) or vector(0)", "legendFormat": "Resolved (7d)" }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "instant": true, "range": false, "expr": "sum(candor_findings_current{severity=\"MEDIUM\", outcome!=\"Resolved\"}) or vector(0)", "legendFormat": "Outstanding" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "instant": true, "range": false, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"resolved\", severity=\"MEDIUM\"}[7d])) or vector(0)", "legendFormat": "Resolved (7d)" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "instant": true, "range": false, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"recurred\", severity=\"MEDIUM\"}[7d])) or vector(0)", "legendFormat": "Recurring (7d)" }
       ]
     },
     {
       "id": 14,
       "title": "Low",
-      "description": "Open: candor_findings_current{severity=\"LOW\"}, excluding Resolved. Resolved: candor_verification_transitions_total{outcome=\"resolved\",severity=\"LOW\"} over 7 days.",
+      "description": "Outstanding: candor_findings_current{severity=\"LOW\"}, excluding Resolved. Resolved / Recurring: candor_verification_transitions_total{severity=\"LOW\"} over 7 days.",
       "type": "stat",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "x": 18, "y": 1, "w": 6, "h": 8 },
+      "gridPos": { "x": 18, "y": 1, "w": 6, "h": 10 },
       "fieldConfig": {
         "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "blue", "value": 1 }] } },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "Resolved (7d)" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] }
+          { "matcher": { "id": "byName", "options": "Resolved (7d)" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+          { "matcher": { "id": "byName", "options": "Recurring (7d)" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }] }
         ]
       },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true }, "orientation": "vertical", "textMode": "value_and_name", "colorMode": "background" },
       "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(candor_findings_current{severity=\"LOW\", outcome!=\"Resolved\"}) or vector(0)", "legendFormat": "Open" },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"resolved\", severity=\"LOW\"}[7d])) or vector(0)", "legendFormat": "Resolved (7d)" }
-      ]
-    },
-    {
-      "id": 17,
-      "title": "Recurred (7d), by Severity",
-      "description": "candor_verification_transitions_total{outcome=\"recurred\"} - a Finding that was Resolved and came back. Separated out from Open/Resolved above and broken down by severity: a regression is a different kind of signal from a new finding at the same severity, worth its own line.",
-      "type": "stat",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "x": 0, "y": 9, "w": 24, "h": 6 },
-      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "unit": "short", "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "purple", "value": 1 }] } }, "overrides": [] },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true }, "orientation": "horizontal", "textMode": "value_and_name", "colorMode": "background" },
-      "targets": [
-        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"recurred\", severity=\"CRITICAL\"}[7d])) or vector(0)", "legendFormat": "Critical" },
-        { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"recurred\", severity=\"HIGH\"}[7d])) or vector(0)", "legendFormat": "High" },
-        { "refId": "C", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"recurred\", severity=\"MEDIUM\"}[7d])) or vector(0)", "legendFormat": "Medium" },
-        { "refId": "D", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"recurred\", severity=\"LOW\"}[7d])) or vector(0)", "legendFormat": "Low" }
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "instant": true, "range": false, "expr": "sum(candor_findings_current{severity=\"LOW\", outcome!=\"Resolved\"}) or vector(0)", "legendFormat": "Outstanding" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "instant": true, "range": false, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"resolved\", severity=\"LOW\"}[7d])) or vector(0)", "legendFormat": "Resolved (7d)" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "instant": true, "range": false, "expr": "sum(increase(candor_verification_transitions_total{outcome=\"recurred\", severity=\"LOW\"}[7d])) or vector(0)", "legendFormat": "Recurring (7d)" }
       ]
     },
     {
@@ -129,7 +121,7 @@
       "description": "Drill-down: how findings status got here, not what it is right now.",
       "type": "row",
       "collapsed": false,
-      "gridPos": { "x": 0, "y": 15, "w": 24, "h": 1 },
+      "gridPos": { "x": 0, "y": 11, "w": 24, "h": 1 },
       "panels": []
     },
     {
@@ -138,7 +130,7 @@
       "description": "candor_verification_transitions_total - how often a Finding's re-checked source turns out resolved, recurred, or still present, over time.",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
       "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": {}, "mappings": [], "unit": "short" }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
@@ -156,7 +148,7 @@
       "description": "Share of would-be enrichments skipped rather than sent to the LLM - the direct, visible proof of docs/design.md pillar 2.",
       "type": "stat",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
       "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "mappings": [], "unit": "percentunit", "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 0.5 }] } }, "overrides": [] },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "orientation": "auto", "textMode": "auto", "colorMode": "value" },
       "targets": [
@@ -173,7 +165,7 @@
       "description": "Self-observability: what Candor itself is doing, not the findings it's watching.",
       "type": "row",
       "collapsed": false,
-      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 1 },
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 1 },
       "panels": []
     },
     {
@@ -182,7 +174,7 @@
       "description": "candor_llm_calls_total - the number the whole fingerprint/budget mechanism exists to keep small.",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "x": 0, "y": 25, "w": 12, "h": 8 },
+      "gridPos": { "x": 0, "y": 21, "w": 12, "h": 8 },
       "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": {}, "mappings": [], "unit": "short" }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
@@ -200,7 +192,7 @@
       "description": "candor_enrichment_skipped_total - in steady state this should dominate LLM Calls by a wide margin.",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "x": 12, "y": 25, "w": 12, "h": 8 },
+      "gridPos": { "x": 12, "y": 21, "w": 12, "h": 8 },
       "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": {}, "mappings": [], "unit": "short" }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
@@ -218,7 +210,7 @@
       "description": "candor_signalpolicy_budget_calls_used vs candor_signalpolicy_budget_calls_limit.",
       "type": "timeseries",
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "gridPos": { "x": 0, "y": 33, "w": 24, "h": 8 },
+      "gridPos": { "x": 0, "y": 29, "w": 24, "h": 8 },
       "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": {}, "mappings": [], "unit": "short" }, "overrides": [] },
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
