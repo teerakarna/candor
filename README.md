@@ -8,11 +8,9 @@ requests — with bounded LLM spend and a published record of its own accuracy.
 
 ## Why
 
-Existing LLM-assisted Kubernetes ops tools (k8sgpt, Kubernaut, HolmesGPT) treat model invocation as
-stateless, unbounded, and unaccountable — which is exactly what shows up in their own issue
-trackers as runaway API spend, unshippable suppression, and no way to check whether a fix actually
-worked. Candor does the same underlying job — signal in, LLM enrichment, human-reviewable action
-out — engineered against those specific, evidenced failures:
+Candor treats LLM invocation as a metered, verifiable resource rather than a stateless, unbounded
+one: signal in, LLM enrichment, human-reviewable action out, with cost, writes, and outcomes all
+accounted for.
 
 - **Bounded cost**: an LLM call happens once per distinct cluster-state fingerprint, ever, not once
   per reconcile. A hard budget ceiling degrades to deterministic-only analysis rather than silently
@@ -20,8 +18,7 @@ out — engineered against those specific, evidenced failures:
 - **GitOps-native**: the default write path is a pull request, not a cluster mutation — so it
   doesn't fight Flux/Argo for control of the cluster.
 - **Self-measuring**: every finding is re-checked and its outcome (resolved/still-present/recurred)
-  is published as metrics — an answer to the "AIOps: Prove It!" critique that most of this category
-  hasn't answered.
+  is published as metrics — a direct answer to the "AIOps: Prove It!" critique of this category.
 
 Full rationale, competitive analysis, and evidence base: [`docs/design.md`](docs/design.md).
 
