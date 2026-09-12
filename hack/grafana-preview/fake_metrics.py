@@ -15,9 +15,32 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 state = {
     "llm_calls": {"success": 42, "error": 1},
     "skipped": {"not_needed": 850, "no_llm_configured": 0, "budget_exhausted": 12, "suppressed": 30},
-    "verification": {"still_present": 60, "resolved": 25, "recurred": 4},
+    # Keyed by (outcome, severity), matching the real metric's label shape.
+    "verification": {
+        ("still_present", "CRITICAL"): 8,
+        ("still_present", "HIGH"): 22,
+        ("still_present", "MEDIUM"): 30,
+        ("resolved", "CRITICAL"): 3,
+        ("resolved", "HIGH"): 13,
+        ("resolved", "MEDIUM"): 9,
+        ("resolved", "LOW"): 5,
+        ("recurred", "CRITICAL"): 1,
+        ("recurred", "HIGH"): 2,
+        ("recurred", "MEDIUM"): 1,
+        ("recurred", "LOW"): 0,
+    },
     "budget_used": {("team-a", "policy"): 8, ("team-b", "policy"): 45},
     "budget_limit": {("team-a", "policy"): 50, ("team-b", "policy"): 50},
+    # candor_findings_current: a live gauge, not a counter - values wander up and down in tick()
+    # rather than only increasing, unlike everything else in this file.
+    "findings_current": {
+        ("team-a", "CRITICAL", "StillPresent"): 2,
+        ("team-a", "HIGH", "StillPresent"): 5,
+        ("team-a", "MEDIUM", "StillPresent"): 8,
+        ("team-b", "LOW", "StillPresent"): 3,
+        ("team-a", "CRITICAL", "Recurred"): 1,
+        ("team-a", "HIGH", "Resolved"): 12,
+    },
 }
 lock = threading.Lock()
 
@@ -32,14 +55,18 @@ def tick():
                 state["llm_calls"]["error"] += 1
             state["skipped"]["not_needed"] += random.randint(3, 9)
             state["skipped"]["suppressed"] += random.choice([0, 0, 1])
-            state["verification"]["still_present"] += random.choice([0, 1])
-            if random.random() < 0.1:
-                state["verification"]["resolved"] += 1
-            if random.random() < 0.03:
-                state["verification"]["recurred"] += 1
+            for key in state["verification"]:
+                outcome = key[0]
+                chance = {"still_present": 0.3, "resolved": 0.1, "recurred": 0.03}[outcome]
+                if random.random() < chance:
+                    state["verification"][key] += 1
             state["budget_used"][("team-a", "policy")] = min(
                 50, state["budget_used"][("team-a", "policy")] + random.choice([0, 1])
             )
+            for key in state["findings_current"]:
+                if random.random() < 0.15:
+                    delta = random.choice([-1, 1])
+                    state["findings_current"][key] = max(0, state["findings_current"][key] + delta)
         time.sleep(5)
 
 
@@ -62,11 +89,11 @@ def render():
 
         lines.append(
             "# HELP candor_verification_transitions_total Total verification outcome transitions "
-            "recorded while ingesting signals, by outcome (still_present|resolved|recurred)."
+            "recorded while ingesting signals, by outcome (still_present|resolved|recurred) and severity."
         )
         lines.append("# TYPE candor_verification_transitions_total counter")
-        for outcome, value in state["verification"].items():
-            lines.append(f'candor_verification_transitions_total{{outcome="{outcome}"}} {value}')
+        for (outcome, severity), value in state["verification"].items():
+            lines.append(f'candor_verification_transitions_total{{outcome="{outcome}",severity="{severity}"}} {value}')
 
         lines.append(
             "# HELP candor_signalpolicy_budget_calls_used LLM calls used in the current budget "
@@ -86,6 +113,16 @@ def render():
         for (namespace, policy), value in state["budget_limit"].items():
             lines.append(
                 f'candor_signalpolicy_budget_calls_limit{{namespace="{namespace}",signalpolicy="{policy}"}} {value}'
+            )
+
+        lines.append(
+            "# HELP candor_findings_current Current number of Findings, by namespace, severity, "
+            "and verification outcome."
+        )
+        lines.append("# TYPE candor_findings_current gauge")
+        for (namespace, severity, outcome), value in state["findings_current"].items():
+            lines.append(
+                f'candor_findings_current{{namespace="{namespace}",severity="{severity}",outcome="{outcome}"}} {value}'
             )
 
         return "\n".join(lines) + "\n"

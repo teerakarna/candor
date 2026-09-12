@@ -1,0 +1,63 @@
+name: Render diagrams
+
+# Auto-renders every Mermaid source under docs-site/docs/assets/*.mmd to a matching high-resolution
+# SVG whenever the source changes, and commits the result back to the PR branch - so nobody has to
+# remember to run mermaid-cli locally after editing a diagram. Mirrors the pattern
+# azva-co/diagrams (private) uses for the same job, generalized here since that repo can't be
+# called from a public repo in a different org.
+
+on:
+  pull_request:
+    paths:
+      - "docs-site/docs/assets/*.mmd"
+      - ".github/workflows/render-diagrams.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write # commit rendered artifacts back to the PR branch
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.head_ref }}
+          persist-credentials: true
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: Install mermaid-cli
+        run: npm install -g @mermaid-js/mermaid-cli
+
+      - name: Render diagrams
+        # mermaid-cli ships puppeteer-core (no bundled browser); point it at the Chrome
+        # pre-installed on the runner instead of downloading one.
+        run: |
+          set -euo pipefail
+          PUPPETEER_EXECUTABLE_PATH="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium-browser || command -v chromium)"
+          export PUPPETEER_EXECUTABLE_PATH
+          echo "Using browser: $PUPPETEER_EXECUTABLE_PATH"
+          for src in docs-site/docs/assets/*.mmd; do
+            out="${src%.mmd}.svg"
+            mmdc -i "$src" -o "$out" -w 2400 -b white
+          done
+
+      - name: Commit rendered artifacts
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs-site/docs/assets/*.svg
+          if git diff --staged --quiet; then
+            echo "No artifact changes - already in sync."
+          else
+            # [skip ci] avoids re-triggering this workflow (and every other push-triggered one)
+            # on the commit it just made.
+            git commit -m "chore(diagrams): render architecture diagrams [skip ci]"
+            git push
+          fi

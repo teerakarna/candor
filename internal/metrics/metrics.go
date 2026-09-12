@@ -9,6 +9,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
+// labelNamespace is shared across this package's metric label lists purely to avoid repeating
+// the literal - every one of these metrics is scoped per-namespace, following the same
+// convention as SignalPolicy itself.
+const labelNamespace = "namespace"
+
 var (
 	// LLMCallsTotal counts real LLM enrichment calls, by result. This is the number the whole
 	// fingerprint/budget mechanism exists to keep small - watch this alongside
@@ -32,12 +37,12 @@ var (
 	BudgetCallsUsed = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "candor_signalpolicy_budget_calls_used",
 		Help: "LLM calls used in the current budget window, per SignalPolicy.",
-	}, []string{"namespace", "signalpolicy"})
+	}, []string{labelNamespace, "signalpolicy"})
 
 	BudgetCallsLimit = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "candor_signalpolicy_budget_calls_limit",
 		Help: "Configured max LLM calls per budget window, per SignalPolicy. Absent if the policy has no budget configured (unlimited).",
-	}, []string{"namespace", "signalpolicy"})
+	}, []string{labelNamespace, "signalpolicy"})
 
 	// VerificationTransitionsTotal is Candor's published accuracy signal (docs/design.md pillar
 	// 4): every time Ingest re-checks a Finding's source and its verification outcome actually
@@ -47,8 +52,8 @@ var (
 	// a deliberately deferred, separate piece of work, not implemented here).
 	VerificationTransitionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "candor_verification_transitions_total",
-		Help: "Total verification outcome transitions recorded while ingesting signals, by outcome (still_present|resolved|recurred).",
-	}, []string{"outcome"})
+		Help: "Total verification outcome transitions recorded while ingesting signals, by outcome (still_present|resolved|recurred) and severity.",
+	}, []string{"outcome", "severity"})
 
 	// WebhookSendsTotal counts every internal/notify.Send call, by result. Covers both immediate
 	// Finding notifications (internal/signal.Ingest) and the periodic digest

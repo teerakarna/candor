@@ -55,6 +55,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resolved, or recurred, and a periodic per-namespace digest (`CANDOR_DIGEST_INTERVAL`, default
   24h) tallying Findings by verification outcome and severity. Both are best-effort - a failure is
   logged and counted (`candor_webhook_sends_total`), never returned as an error.
+- `candor_findings_current{namespace,severity,outcome}`: a live gauge (Prometheus `Collector`,
+  computed fresh on every scrape from the manager's cached client, not a package-level counter
+  like every other metric here) reporting how many Findings currently exist per severity and
+  verification outcome. None of the existing metrics could answer "how many findings are open
+  right now" - they're all transition counters or self-observability. This is the metric behind
+  the redesigned dashboard's landing status tiles.
+- `candor_verification_transitions_total` now also carries a `severity` label (previously
+  `outcome` only), so Resolved/Recurred can be broken down per severity, not just in aggregate.
+- Redesigned Grafana dashboard: leads with four colour-coded severity tiles (Critical/High/Medium/
+  Low), each showing the current open count and the 7-day resolved count together, so the first
+  thing an operator sees is what needs action versus what's been taken care of - not Candor's own
+  cost metrics. Recurrence is broken out into its own panel, by severity, since a regression is a
+  different signal from a new finding at the same severity. Historical trends and cost/operator-
+  health panels (LLM calls, budget usage, enrichment-avoidance ratio) are still present, grouped
+  under labelled rows, as drill-down rather than the first view.
 
 ### Fixed
 
@@ -70,3 +85,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `hack/grafana-preview/`: a `docker compose` stack (fake metrics generator + Prometheus + Grafana,
   both auto-provisioned) for visually checking the dashboard locally without a real cluster or
   operator - see its README.
+- `render-diagrams.yml`: auto-renders `docs-site/docs/assets/*.mmd` to a matching high-resolution
+  SVG whenever the source changes, committing the result back to the PR - nobody has to remember
+  to run `mermaid-cli` locally after editing a diagram.
