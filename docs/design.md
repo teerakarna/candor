@@ -136,6 +136,46 @@ are plausible later additions, not v1.
   fingerprint; ranked hypotheses, confidence, verification outcome), `Suppression`.
 - **API group**: `candor.dev/v1alpha1`.
 
+## Every accelerator ships with its brake
+
+**Non-negotiable, and it governs every slice below.** Any mechanism that can act, spend, or
+generate must have its limit defined and enforced in the *same change* that introduces it. Not the
+next slice, not "before v1". The same pull request.
+
+A brake added later is not a brake, because the window in which it was missing is exactly the
+window in which the thing runs unattended and nobody is watching for a failure mode that has not
+been imagined yet. The worst shape is the self-multiplying one: an action that produces a signal
+that triggers the same action.
+
+What counts as a brake:
+
+- A hard ceiling with a defined window (`Budget.maxCalls`), and a defined behaviour on hitting it
+  that **degrades rather than fails**.
+- A gate that makes repeat work a no-op (`NeedsEnrichment`, keyed on content, not time).
+- A kill switch a human can reach without a rebuild, and which is visible in status and Events.
+- A test that proves the limit actually holds against real volume, not that the accounting is
+  internally consistent. `TestFindingReconciler_BudgetCostRegression` is the pattern: N genuinely
+  distinct items against a ceiling of 2, asserting exactly 2 calls happen.
+
+**Where this stands today, honestly.** Every brake Candor has is on the *cost* path: the
+fingerprint gate, the budget ceiling, suppression. The *action* path has none, because until slice
+9 there are no actions. The circuit breakers listed under "What the original spec got right" (max
+disruption percentage, global rate limit, panic switch dropping to Audit mode) are **design intent,
+not implemented code**, as of 2026-09-12.
+
+**This binds slice 9 specifically.** `ProposePullRequest` is the first mechanism that writes
+anything outward. It does not ship without, in the same slice:
+
+- a cap on pull requests opened per window, per namespace, that degrades to Notify on exhaustion
+- a global rate limit across all namespaces, so one noisy provider cannot exhaust the whole cluster's
+  allowance
+- a panic switch that drops to Audit mode and is reachable by editing a CRD, not by redeploying
+- a test that proves each of those holds under volume
+
+The same rule applies to anything that generates artifacts to reduce noise. A mechanism that
+answers "too much to deal with" by producing more things to deal with has to justify its output
+budget explicitly, or it is not a solution.
+
 ## Delivery slices
 
 1. Repo prep, kubebuilder scaffold, CI, OSS boilerplate, release automation (goreleaser, cosign +
