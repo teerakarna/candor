@@ -33,6 +33,9 @@ import (
 // rate limit across all namespaces, so one noisy provider cannot exhaust the whole cluster's
 // allowance") - that needs exactly one object visible cluster-wide, not one per namespace.
 //
+// It's also where the other cluster-wide brake docs/design.md:189 requires lives: Mode is the
+// panic switch, "reachable by editing a CRD, not by redeploying" - see that field's doc comment.
+//
 // Exactly one OperatingPolicy is meaningful, named "default" by convention
 // (config/samples/candor_v1alpha1_operatingpolicy.yaml). internal/signal.FindOperatingPolicy reads
 // it; OperatingPolicyReconciler flags a second object as a misconfiguration (Ready=False) rather
@@ -48,7 +51,32 @@ type OperatingPolicySpec struct {
 	// still be refused if this cluster-wide ceiling is exhausted.
 	// +optional
 	PullRequestRateLimit *PullRequestRateLimit `json:"pullRequestRateLimit,omitempty"`
+
+	// mode is the panic switch docs/design.md:189 requires: "reachable by editing a CRD, not by
+	// redeploying". OperatingModeAudit disables ProposePullRequest across every namespace
+	// immediately - before any per-namespace or global budget is even checked, so flipping this
+	// is a genuine full stop, not "still counted against the budget but not executed". Findings
+	// that would have triggered a pull request are simply not acted on; nothing else about
+	// Candor (enrichment, notification, verification) is affected - this is a brake on the
+	// action path specifically, not a global kill switch for the whole operator.
+	// +kubebuilder:validation:Enum=Active;Audit
+	// +kubebuilder:default=Active
+	// +optional
+	Mode string `json:"mode,omitempty"`
 }
+
+// OperatingPolicy's two modes. Deliberately not named to echo the future, unrelated
+// Quarantine/Enforcing mode (docs/design.md: post-v1, gated on the verification loop, and about
+// direct cluster mutation) - this is a narrower, already-shipped brake on ProposePullRequest only.
+const (
+	// OperatingModeActive is the default: ProposePullRequest proceeds normally, subject to its
+	// other brakes (per-namespace and global budgets, a mechanically verified fix).
+	OperatingModeActive = "Active"
+
+	// OperatingModeAudit is the panic switch's target state: ProposePullRequest is disabled
+	// cluster-wide until Mode is changed back.
+	OperatingModeAudit = "Audit"
+)
 
 // PullRequestRateLimit bounds ProposePullRequest actions across the whole cluster over a rolling
 // window - the global counterpart to the per-namespace PullRequestBudget.
@@ -79,6 +107,13 @@ type OperatingPolicyStatus struct {
 	// +optional
 	PullRequestsOpened int32 `json:"pullRequestsOpened,omitempty"`
 
+	// observedMode is the Mode value OperatingPolicyReconciler last saw, kept only to detect a
+	// transition worth an Event (see that reconciler) - not itself the visibility mechanism.
+	// spec.mode is always the source of truth for what mode Candor is actually in; read that, not
+	// this.
+	// +optional
+	ObservedMode string `json:"observedMode,omitempty"`
+
 	// For Kubernetes API conventions, see:
 	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
 
@@ -94,6 +129,7 @@ type OperatingPolicyStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:printcolumn:name="Mode",type=string,JSONPath=".spec.mode"
 // +kubebuilder:printcolumn:name="PRsOpened",type=integer,JSONPath=".status.pullRequestsOpened"
 // +kubebuilder:printcolumn:name="PRsMax",type=integer,JSONPath=".spec.pullRequestRateLimit.maxPullRequests"
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=".status.conditions[?(@.type==\"Ready\")].status"

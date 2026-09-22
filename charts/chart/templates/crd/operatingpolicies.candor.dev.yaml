@@ -18,6 +18,9 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
     - jsonPath: .status.pullRequestsOpened
       name: PRsOpened
       type: integer
@@ -52,6 +55,20 @@ spec:
           spec:
             description: spec defines the desired state of OperatingPolicy
             properties:
+              mode:
+                default: Active
+                description: |-
+                  mode is the panic switch docs/design.md:189 requires: "reachable by editing a CRD, not by
+                  redeploying". OperatingModeAudit disables ProposePullRequest across every namespace
+                  immediately - before any per-namespace or global budget is even checked, so flipping this
+                  is a genuine full stop, not "still counted against the budget but not executed". Findings
+                  that would have triggered a pull request are simply not acted on; nothing else about
+                  Candor (enrichment, notification, verification) is affected - this is a brake on the
+                  action path specifically, not a global kill switch for the whole operator.
+                enum:
+                - Active
+                - Audit
+                type: string
               pullRequestRateLimit:
                 description: |-
                   pullRequestRateLimit bounds ProposePullRequest actions across every namespace in the
@@ -144,6 +161,13 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              observedMode:
+                description: |-
+                  observedMode is the Mode value OperatingPolicyReconciler last saw, kept only to detect a
+                  transition worth an Event (see that reconciler) - not itself the visibility mechanism.
+                  spec.mode is always the source of truth for what mode Candor is actually in; read that, not
+                  this.
+                type: string
               pullRequestWindowStart:
                 description: |-
                   pullRequestWindowStart is when the current global pull request window began. Unset means no

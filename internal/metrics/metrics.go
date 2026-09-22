@@ -41,7 +41,7 @@ var (
 	// brakes exist to keep small.
 	PullRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "candor_pull_requests_total",
-		Help: "Total ProposePullRequest decisions following a recommendation to act, by result (success|error|no_mechanical_fix|budget_exhausted|global_budget_exhausted).",
+		Help: "Total ProposePullRequest decisions following a recommendation to act, by result (success|error|no_mechanical_fix|budget_exhausted|global_budget_exhausted|audit_mode).",
 	}, []string{labelResult})
 
 	// BudgetCallsUsed and BudgetCallsLimit are gauges per SignalPolicy - cardinality is bounded by

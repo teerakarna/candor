@@ -16,3 +16,6 @@ spec:
   pullRequestRateLimit:
     maxPullRequests: 5
     windowSeconds: 86400
+  # The panic switch (docs/design.md:189): flip to "Audit" to stop ProposePullRequest across
+  # every namespace immediately, without redeploying anything. Defaults to "Active" if omitted.
+  mode: Active

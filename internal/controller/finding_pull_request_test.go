@@ -23,8 +23,9 @@ import (
 )
 
 const (
-	testSecretName = "github-token"
-	testPRURL      = "https://github.com/acme/gitops/pull/1"
+	testSecretName          = "github-token"
+	testPRURL               = "https://github.com/acme/gitops/pull/1"
+	testOperatingPolicyName = "default"
 )
 
 // fakeOpener is a fake gitops.Opener that records whether it was called - enough to prove the
@@ -91,7 +92,7 @@ func gitOpsPolicy(maxPullRequests int32) *candorv1alpha1.SignalPolicy {
 // OperatingPolicy) doesn't mask what the test actually wants to prove.
 func permissiveOperatingPolicy() *candorv1alpha1.OperatingPolicy {
 	return &candorv1alpha1.OperatingPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testOperatingPolicyName},
 		Spec: candorv1alpha1.OperatingPolicySpec{
 			PullRequestRateLimit: &candorv1alpha1.PullRequestRateLimit{MaxPullRequests: 100, WindowSeconds: 86400},
 		},
@@ -324,6 +325,83 @@ func TestFindingReconciler_ProposePullRequest_NoOpenerWired_NoOp(t *testing.T) {
 
 	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: namespacedName(finding)}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestFindingReconciler_ProposePullRequest_AuditMode_IsAGenuineFullStop is the regression #40
+// exists for: docs/design.md:189's panic switch must stop ProposePullRequest before either budget
+// is even checked, not just before the pull request opens - otherwise flipping to Audit still
+// quietly spends a namespace's (and the cluster's) allowance on attempts that never happen.
+func TestFindingReconciler_ProposePullRequest_AuditMode_IsAGenuineFullStop(t *testing.T) {
+	scheme := pullRequestScheme(t)
+	finding := findingRecommending("vr-1", candorv1alpha1.ActionProposePullRequest)
+	policy := gitOpsPolicy(5)
+	auditPolicy := permissiveOperatingPolicy()
+	auditPolicy.Spec.Mode = candorv1alpha1.OperatingModeAudit
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(finding, policy, gitHubTokenSecret(), vulnReportWithFix(), auditPolicy).
+		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}, &candorv1alpha1.OperatingPolicy{}).Build()
+
+	opener := &fakeOpener{url: testPRURL}
+	recorder := record.NewFakeRecorder(10)
+	r := &FindingReconciler{Client: c, Scheme: scheme, LLM: &countingLLM{resp: llm.Response{}}, GitOps: opener, Recorder: recorder}
+
+	ctx := context.Background()
+	if _, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: namespacedName(finding)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := opener.calls.Load(); got != 0 {
+		t.Fatalf("Opener calls = %d, want 0 - Audit mode must block before opening anything", got)
+	}
+
+	select {
+	case event := <-recorder.Events:
+		if !strings.Contains(event, "AuditModeActive") {
+			t.Errorf("event = %q, want it to mention AuditModeActive", event)
+		}
+	default:
+		t.Fatal("expected an AuditModeActive event, got none")
+	}
+
+	gotPolicy := &candorv1alpha1.SignalPolicy{}
+	if err := c.Get(ctx, client.ObjectKey{Namespace: corev1.NamespaceDefault, Name: testPolicyName}, gotPolicy); err != nil {
+		t.Fatal(err)
+	}
+	if gotPolicy.Status.PullRequestsOpened != 0 {
+		t.Errorf("namespace's PullRequestsOpened = %d, want 0 - Audit mode must not spend the per-namespace budget", gotPolicy.Status.PullRequestsOpened)
+	}
+
+	gotGlobal := &candorv1alpha1.OperatingPolicy{}
+	if err := c.Get(ctx, client.ObjectKey{Name: testOperatingPolicyName}, gotGlobal); err != nil {
+		t.Fatal(err)
+	}
+	if gotGlobal.Status.PullRequestsOpened != 0 {
+		t.Errorf("global PullRequestsOpened = %d, want 0 - Audit mode must not spend the global budget either", gotGlobal.Status.PullRequestsOpened)
+	}
+}
+
+// TestFindingReconciler_ProposePullRequest_ActiveMode_ProceedsNormally proves Mode=Active (the
+// default) doesn't itself block anything - only Audit does.
+func TestFindingReconciler_ProposePullRequest_ActiveMode_ProceedsNormally(t *testing.T) {
+	scheme := pullRequestScheme(t)
+	finding := findingRecommending("vr-1", candorv1alpha1.ActionProposePullRequest)
+	policy := gitOpsPolicy(1)
+	activePolicy := permissiveOperatingPolicy()
+	activePolicy.Spec.Mode = candorv1alpha1.OperatingModeActive
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(finding, policy, gitHubTokenSecret(), vulnReportWithFix(), activePolicy).
+		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}, &candorv1alpha1.OperatingPolicy{}).Build()
+
+	opener := &fakeOpener{url: testPRURL}
+	r := &FindingReconciler{Client: c, Scheme: scheme, LLM: &countingLLM{resp: llm.Response{}}, GitOps: opener, Recorder: record.NewFakeRecorder(10)}
+
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: namespacedName(finding)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := opener.calls.Load(); got != 1 {
+		t.Fatalf("Opener calls = %d, want 1 (Mode=Active must not block anything)", got)
 	}
 }
 

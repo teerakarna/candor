@@ -19,9 +19,11 @@ package controller
 import (
 	"context"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -36,6 +38,11 @@ import (
 type OperatingPolicyReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	// Recorder emits a K8s Event on every Mode transition - docs/design.md's brake definition
+	// requires the panic switch be "visible in status and Events", not status alone. Defaulted in
+	// SetupWithManager if unset.
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=candor.dev,resources=operatingpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -70,8 +77,24 @@ func (r *OperatingPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		condition.Reason = "Active"
 		condition.Message = "governing the cluster-wide pull request rate limit"
 	}
-
 	meta.SetStatusCondition(&policy.Status.Conditions, condition)
+
+	// currentMode falls back to OperatingModeActive for an object that predates this field, or
+	// was written by something that skipped CRD defaulting (e.g. a raw client in a test) -
+	// matches internal/signal.InAuditMode's own stance that only an explicit "Audit" counts.
+	currentMode := policy.Spec.Mode
+	if currentMode == "" {
+		currentMode = candorv1alpha1.OperatingModeActive
+	}
+	if previous := policy.Status.ObservedMode; previous != "" && previous != currentMode {
+		eventType := corev1.EventTypeNormal
+		if currentMode == candorv1alpha1.OperatingModeAudit {
+			eventType = corev1.EventTypeWarning
+		}
+		r.Recorder.Eventf(policy, eventType, "ModeChanged", "operating mode changed from %s to %s", previous, currentMode)
+	}
+	policy.Status.ObservedMode = currentMode
+
 	if err := r.Status().Update(ctx, policy); err != nil {
 		log.Error(err, "Failed to update OperatingPolicy status")
 		return ctrl.Result{}, err
@@ -82,6 +105,9 @@ func (r *OperatingPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *OperatingPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.Recorder == nil {
+		r.Recorder = mgr.GetEventRecorderFor("candor") //nolint:staticcheck
+	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&candorv1alpha1.OperatingPolicy{}).
 		Named("operatingpolicy").

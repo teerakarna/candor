@@ -214,10 +214,12 @@ func (r *FindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 // tryProposePullRequest attempts ProposePullRequest for finding's top hypothesis. It is a no-op -
 // silently degrading to Notify, which already happened for this Finding via internal/signal.Ingest
 // - whenever any precondition isn't met: GitOps isn't wired up, policy has no GitOpsRepo, the top
-// hypothesis didn't recommend it, this exact fingerprint was already attempted, no concrete fix
-// can be mechanically derived (internal/gitops.ComputeFix), the per-namespace pull request budget
-// is exhausted, or the cluster-wide OperatingPolicy rate limit is exhausted (docs/design.md:189's
-// global brake, checked in addition to and after the per-namespace one).
+// hypothesis didn't recommend it, this exact fingerprint was already attempted, the OperatingPolicy
+// panic switch is in Audit mode (docs/design.md:189, checked first and before either budget is
+// touched, so it's a genuine full stop), no concrete fix can be mechanically derived
+// (internal/gitops.ComputeFix), the per-namespace pull request budget is exhausted, or the
+// cluster-wide OperatingPolicy rate limit is exhausted (checked in addition to and after the
+// per-namespace one).
 //
 // Two distinct kinds of "didn't happen" are deliberately handled differently, mirroring how
 // NeedsEnrichment/EnrichedFingerprint already treat the LLM path:
@@ -246,6 +248,21 @@ func (r *FindingReconciler) tryProposePullRequest(ctx context.Context, finding *
 		return nil
 	}
 
+	// Checked before anything else, including before computing a fix or touching either budget:
+	// the panic switch (docs/design.md:189) is meant to be a genuine, immediate full stop, not
+	// "still counted against a namespace's budget but not executed". A namespace's own allowance
+	// is untouched while Audit mode is active.
+	operatingPolicy, err := signal.FindOperatingPolicy(ctx, r.Client)
+	if err != nil {
+		return fmt.Errorf("finding OperatingPolicy: %w", err)
+	}
+	if signal.InAuditMode(operatingPolicy) {
+		metrics.PullRequestsTotal.WithLabelValues("audit_mode").Inc()
+		r.Recorder.Eventf(operatingPolicy, corev1.EventTypeWarning, "AuditModeActive",
+			"ProposePullRequest for %s/%s skipped - OperatingPolicy is in Audit mode", finding.Namespace, finding.Name)
+		return nil
+	}
+
 	fix, ok, err := gitops.ComputeFix(ctx, r.Client, finding)
 	if err != nil {
 		return fmt.Errorf("computing fix for Finding %s/%s: %w", finding.Namespace, finding.Name, err)
@@ -271,10 +288,6 @@ func (r *FindingReconciler) tryProposePullRequest(ctx context.Context, finding *
 	// comfortably under its own cap while the cluster-wide ceiling is exhausted by everyone else
 	// combined (docs/design.md:189's "one noisy provider cannot exhaust the whole cluster's
 	// allowance"). Both must allow before a pull request opens.
-	operatingPolicy, err := signal.FindOperatingPolicy(ctx, r.Client)
-	if err != nil {
-		return fmt.Errorf("finding OperatingPolicy: %w", err)
-	}
 	globalAllowed, err := signal.CheckGlobalPullRequestBudget(ctx, r.Client, operatingPolicy)
 	if err != nil {
 		return fmt.Errorf("checking global pull request budget: %w", err)
