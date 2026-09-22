@@ -79,7 +79,16 @@ type FindingReconciler struct {
 // +kubebuilder:rbac:groups=candor.dev,resources=signalpolicies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=candor.dev,resources=suppressions,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=get
+//
+// Deliberately no cluster-wide `secrets` RBAC marker here. A ClusterRole granting `get` on
+// Secrets at cluster scope is equivalent to cluster-admin in most clusters (Trivy KSV-0041: any
+// other Secret in the cluster becomes readable, not just the one this controller actually needs) -
+// exactly the kind of unbounded blast radius docs/design.md pillar 1 rules out. Reading
+// SignalPolicy.Spec.GitOpsRepo.SecretRef is real least-privilege-by-default: the namespace that
+// sets GitOpsRepo grants the controller's ServiceAccount a namespaced Role naming that one Secret,
+// the same opt-in-per-namespace posture SignalPolicy itself already requires (see that type's own
+// doc comment). Missing RBAC surfaces as a normal Forbidden error on the Get call below, which
+// requeues and logs - the same "fail loud, not silent" posture as every other error path here.
 
 func (r *FindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)

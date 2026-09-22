@@ -113,6 +113,11 @@ spec:
                     description: |-
                       secretRef names a Secret in this SignalPolicy's namespace holding a GitHub token with
                       contents and pull-request write access to Repo, under the key "token".
+
+                      The controller's ClusterRole deliberately grants no cluster-wide access to Secrets (KSV-0041:
+                      that would be equivalent to cluster-admin in most clusters). Setting GitOpsRepo requires this
+                      namespace to also grant the controller's ServiceAccount a namespaced Role naming this one
+                      Secret - the same opt-in-per-namespace posture SignalPolicy itself already requires.
                     properties:
                       name:
                         default: ""

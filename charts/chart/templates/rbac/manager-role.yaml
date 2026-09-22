@@ -18,12 +18,6 @@ rules:
   - create
   - patch
 - apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
-  - get
-- apiGroups:
   - aquasecurity.github.io
   resources:
   - vulnerabilityreports
