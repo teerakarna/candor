@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
@@ -85,6 +86,18 @@ func gitOpsPolicy(maxPullRequests int32) *candorv1alpha1.SignalPolicy {
 	}
 }
 
+// permissiveOperatingPolicy has plenty of global headroom - used by every test where the global
+// brake isn't what's under test, so CheckGlobalPullRequestBudget's fail-closed default (no
+// OperatingPolicy) doesn't mask what the test actually wants to prove.
+func permissiveOperatingPolicy() *candorv1alpha1.OperatingPolicy {
+	return &candorv1alpha1.OperatingPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		Spec: candorv1alpha1.OperatingPolicySpec{
+			PullRequestRateLimit: &candorv1alpha1.PullRequestRateLimit{MaxPullRequests: 100, WindowSeconds: 86400},
+		},
+	}
+}
+
 func gitHubTokenSecret() *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: testSecretName, Namespace: corev1.NamespaceDefault},
@@ -121,8 +134,8 @@ func TestFindingReconciler_ProposePullRequest_OpensPR(t *testing.T) {
 	finding := findingRecommending("vr-1", candorv1alpha1.ActionProposePullRequest)
 	policy := gitOpsPolicy(1)
 	c := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(finding, policy, gitHubTokenSecret(), vulnReportWithFix()).
-		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}).Build()
+		WithObjects(finding, policy, gitHubTokenSecret(), vulnReportWithFix(), permissiveOperatingPolicy()).
+		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}, &candorv1alpha1.OperatingPolicy{}).Build()
 
 	opener := &fakeOpener{url: testPRURL}
 	recorder := record.NewFakeRecorder(10)
@@ -272,8 +285,8 @@ func TestFindingReconciler_ProposePullRequest_ErrorOpeningRetriesOnNextReconcile
 	finding := findingRecommending("vr-1", candorv1alpha1.ActionProposePullRequest)
 	policy := gitOpsPolicy(2)
 	c := fake.NewClientBuilder().WithScheme(scheme).
-		WithObjects(finding, policy, gitHubTokenSecret(), vulnReportWithFix()).
-		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}).Build()
+		WithObjects(finding, policy, gitHubTokenSecret(), vulnReportWithFix(), permissiveOperatingPolicy()).
+		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}, &candorv1alpha1.OperatingPolicy{}).Build()
 
 	opener := &fakeOpener{err: fmt.Errorf("simulated GitHub API outage")}
 	r := &FindingReconciler{Client: c, Scheme: scheme, LLM: &countingLLM{resp: llm.Response{}}, GitOps: opener, Recorder: record.NewFakeRecorder(10)}
@@ -311,5 +324,119 @@ func TestFindingReconciler_ProposePullRequest_NoOpenerWired_NoOp(t *testing.T) {
 
 	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: namespacedName(finding)}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestFindingReconciler_ProposePullRequest_NoOperatingPolicyAtAll_DeniesGlobally proves
+// internal/signal.CheckGlobalPullRequestBudget's fail-closed default holds end-to-end through the
+// reconciler: everything else about this Finding would succeed, but with no OperatingPolicy
+// object anywhere in the cluster, ProposePullRequest stays off.
+func TestFindingReconciler_ProposePullRequest_NoOperatingPolicyAtAll_DeniesGlobally(t *testing.T) {
+	scheme := pullRequestScheme(t)
+	finding := findingRecommending("vr-1", candorv1alpha1.ActionProposePullRequest)
+	policy := gitOpsPolicy(1)
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(finding, policy, gitHubTokenSecret(), vulnReportWithFix()).
+		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}).Build()
+
+	opener := &fakeOpener{url: testPRURL}
+	recorder := record.NewFakeRecorder(10)
+	r := &FindingReconciler{Client: c, Scheme: scheme, LLM: &countingLLM{resp: llm.Response{}}, GitOps: opener, Recorder: recorder}
+
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: namespacedName(finding)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := opener.calls.Load(); got != 0 {
+		t.Fatalf("Opener calls = %d, want 0 - ProposePullRequest must stay off cluster-wide until an OperatingPolicy exists", got)
+	}
+
+	select {
+	case event := <-recorder.Events:
+		if !strings.Contains(event, "GlobalPullRequestBudgetExhausted") {
+			t.Errorf("event = %q, want it to mention GlobalPullRequestBudgetExhausted", event)
+		}
+	default:
+		t.Fatal("expected a GlobalPullRequestBudgetExhausted event, got none")
+	}
+}
+
+// TestFindingReconciler_ProposePullRequest_GlobalBudgetBlocksEvenWithNamespaceRoomToSpare is the
+// regression #39 exists for: docs/design.md:189 requires "a global rate limit across all
+// namespaces, so one noisy provider cannot exhaust the whole cluster's allowance." Two different
+// namespaces, each with plenty of per-namespace budget, collectively exceed a small global
+// ceiling - the second must be blocked by the global check even though its own namespace has
+// room to spare.
+func TestFindingReconciler_ProposePullRequest_GlobalBudgetBlocksEvenWithNamespaceRoomToSpare(t *testing.T) {
+	scheme := pullRequestScheme(t)
+
+	finding1 := findingRecommending("vr-1", candorv1alpha1.ActionProposePullRequest)
+	policy1 := gitOpsPolicy(100) // plenty of per-namespace room
+
+	const secondNamespace = "team-b"
+	finding2 := findingRecommending("vr-2", candorv1alpha1.ActionProposePullRequest)
+	finding2.Namespace = secondNamespace
+	finding2.Name = "f2"
+	policy2 := gitOpsPolicy(100)
+	policy2.Namespace = secondNamespace
+	secret2 := gitHubTokenSecret()
+	secret2.Namespace = secondNamespace
+	report2 := vulnReportWithFix()
+	report2.SetName("vr-2")
+	report2.SetNamespace(secondNamespace)
+
+	// The whole point of this test: only one pull request fits in the global window, despite
+	// both namespaces individually allowing up to 100.
+	globalPolicy := permissiveOperatingPolicy()
+	globalPolicy.Spec.PullRequestRateLimit.MaxPullRequests = 1
+
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(finding1, policy1, gitHubTokenSecret(), vulnReportWithFix(),
+			finding2, policy2, secret2, report2, globalPolicy).
+		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}, &candorv1alpha1.OperatingPolicy{}).Build()
+
+	opener := &fakeOpener{url: testPRURL}
+	recorder := record.NewFakeRecorder(10)
+	r := &FindingReconciler{Client: c, Scheme: scheme, LLM: &countingLLM{resp: llm.Response{}}, GitOps: opener, Recorder: recorder}
+
+	ctx := context.Background()
+	if _, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: namespacedName(finding1)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := opener.calls.Load(); got != 1 {
+		t.Fatalf("after the first namespace's Finding: Opener calls = %d, want 1", got)
+	}
+	select {
+	case event := <-recorder.Events:
+		if !strings.Contains(event, "PullRequestProposed") {
+			t.Fatalf("first reconcile event = %q, want it to mention PullRequestProposed", event)
+		}
+	default:
+		t.Fatal("expected a PullRequestProposed event after the first reconcile, got none")
+	}
+
+	if _, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: namespacedName(finding2)}); err != nil {
+		t.Fatal(err)
+	}
+	if got := opener.calls.Load(); got != 1 {
+		t.Fatalf("after the second namespace's Finding: Opener calls = %d, want still 1 (global ceiling of 1 already spent by the first namespace)", got)
+	}
+
+	select {
+	case event := <-recorder.Events:
+		if !strings.Contains(event, "GlobalPullRequestBudgetExhausted") {
+			t.Errorf("event = %q, want it to mention GlobalPullRequestBudgetExhausted", event)
+		}
+	default:
+		t.Fatal("expected a GlobalPullRequestBudgetExhausted event, got none")
+	}
+
+	// The second namespace's own budget shows the attempt was counted locally too, even though
+	// the pull request never actually opened - its own budget was never the constraint.
+	gotPolicy2 := &candorv1alpha1.SignalPolicy{}
+	if err := c.Get(ctx, client.ObjectKey{Namespace: secondNamespace, Name: testPolicyName}, gotPolicy2); err != nil {
+		t.Fatal(err)
+	}
+	if gotPolicy2.Status.PullRequestsOpened != 1 {
+		t.Errorf("second namespace's PullRequestsOpened = %d, want 1", gotPolicy2.Status.PullRequestsOpened)
 	}
 }

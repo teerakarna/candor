@@ -57,11 +57,11 @@ func CheckPullRequestBudget(ctx context.Context, c client.Client, policy *candor
 	if allowed {
 		policy.Status.PullRequestsOpened++
 		condition.Status = metav1.ConditionFalse
-		condition.Reason = "WithinBudget"
+		condition.Reason = reasonWithinBudget
 		condition.Message = fmt.Sprintf("%d/%d pull requests opened this window", policy.Status.PullRequestsOpened, maxPullRequests)
 	} else {
 		condition.Status = metav1.ConditionTrue
-		condition.Reason = "LimitReached"
+		condition.Reason = reasonLimitReached
 		condition.Message = fmt.Sprintf("%d/%d pull requests opened - ProposePullRequest degraded to Notify until the window resets", policy.Status.PullRequestsOpened, maxPullRequests)
 	}
 	meta.SetStatusCondition(&policy.Status.Conditions, condition)

@@ -1,0 +1,18 @@
+apiVersion: candor.dev/v1alpha1
+kind: OperatingPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: candor
+    app.kubernetes.io/managed-by: kustomize
+  # Exactly one OperatingPolicy is meaningful in a cluster - named "default" by convention (see
+  # that type's doc comment in api/v1alpha1/operatingpolicy_types.go). Creating a second one is
+  # flagged as a misconfiguration by OperatingPolicyReconciler, not silently merged.
+  name: default
+spec:
+  # Omitting pullRequestRateLimit entirely still enables ProposePullRequest cluster-wide, at the
+  # conservative built-in default (see internal/signal.CheckGlobalPullRequestBudget) - this
+  # object existing at all is what turns the action path on; the object being empty is what keeps
+  # it conservative until you decide otherwise.
+  pullRequestRateLimit:
+    maxPullRequests: 5
+    windowSeconds: 86400

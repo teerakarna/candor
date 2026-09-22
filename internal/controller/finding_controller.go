@@ -78,6 +78,8 @@ type FindingReconciler struct {
 // +kubebuilder:rbac:groups=candor.dev,resources=signalpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=candor.dev,resources=signalpolicies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=candor.dev,resources=suppressions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=candor.dev,resources=operatingpolicies,verbs=get;list;watch
+// +kubebuilder:rbac:groups=candor.dev,resources=operatingpolicies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 //
 // Deliberately no cluster-wide `secrets` RBAC marker here. A ClusterRole granting `get` on
@@ -212,8 +214,10 @@ func (r *FindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 // tryProposePullRequest attempts ProposePullRequest for finding's top hypothesis. It is a no-op -
 // silently degrading to Notify, which already happened for this Finding via internal/signal.Ingest
 // - whenever any precondition isn't met: GitOps isn't wired up, policy has no GitOpsRepo, the top
-// hypothesis didn't recommend it, this exact fingerprint was already attempted, or no concrete fix
-// can be mechanically derived (internal/gitops.ComputeFix).
+// hypothesis didn't recommend it, this exact fingerprint was already attempted, no concrete fix
+// can be mechanically derived (internal/gitops.ComputeFix), the per-namespace pull request budget
+// is exhausted, or the cluster-wide OperatingPolicy rate limit is exhausted (docs/design.md:189's
+// global brake, checked in addition to and after the per-namespace one).
 //
 // Two distinct kinds of "didn't happen" are deliberately handled differently, mirroring how
 // NeedsEnrichment/EnrichedFingerprint already treat the LLM path:
@@ -260,6 +264,26 @@ func (r *FindingReconciler) tryProposePullRequest(ctx context.Context, finding *
 		r.Recorder.Eventf(policy, corev1.EventTypeWarning, "PullRequestBudgetExhausted",
 			"ProposePullRequest for %s/%s skipped - pull request budget exhausted (%d/%d this window)",
 			finding.Namespace, finding.Name, policy.Status.PullRequestsOpened, pullRequestMax(policy))
+		return nil
+	}
+
+	// Checked in addition to, and after, the per-namespace budget above: a namespace can sit
+	// comfortably under its own cap while the cluster-wide ceiling is exhausted by everyone else
+	// combined (docs/design.md:189's "one noisy provider cannot exhaust the whole cluster's
+	// allowance"). Both must allow before a pull request opens.
+	operatingPolicy, err := signal.FindOperatingPolicy(ctx, r.Client)
+	if err != nil {
+		return fmt.Errorf("finding OperatingPolicy: %w", err)
+	}
+	globalAllowed, err := signal.CheckGlobalPullRequestBudget(ctx, r.Client, operatingPolicy)
+	if err != nil {
+		return fmt.Errorf("checking global pull request budget: %w", err)
+	}
+	if !globalAllowed {
+		metrics.PullRequestsTotal.WithLabelValues("global_budget_exhausted").Inc()
+		r.Recorder.Eventf(policy, corev1.EventTypeWarning, "GlobalPullRequestBudgetExhausted",
+			"ProposePullRequest for %s/%s skipped - cluster-wide pull request budget exhausted",
+			finding.Namespace, finding.Name)
 		return nil
 	}
 

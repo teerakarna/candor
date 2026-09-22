@@ -255,6 +255,13 @@ func main() {
 		setupLog.Error(err, "Failed to create controller", "controller", "trivy-provider")
 		os.Exit(1)
 	}
+	if err := (&controller.OperatingPolicyReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "operatingpolicy")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	digestInterval := 24 * time.Hour
