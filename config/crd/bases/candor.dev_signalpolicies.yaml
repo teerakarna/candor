@@ -30,6 +30,12 @@ spec:
     - jsonPath: .spec.webhook.url
       name: Webhook
       type: string
+    - jsonPath: .status.pullRequestsOpened
+      name: PRsOpened
+      type: integer
+    - jsonPath: .spec.pullRequestBudget.maxPullRequests
+      name: PRsMax
+      type: integer
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -79,6 +85,61 @@ spec:
                 required:
                 - maxCalls
                 type: object
+              gitOpsRepo:
+                description: |-
+                  gitOpsRepo configures the GitOps repository ProposePullRequest writes to. Optional - omitted
+                  means ProposePullRequest is never selectable for this namespace's Findings, regardless of
+                  what a Hypothesis recommends - the same "not configured, so skip" stance Budget and Webhook
+                  already take.
+                properties:
+                  baseBranch:
+                    default: main
+                    description: baseBranch is the branch ProposePullRequest branches
+                      from and opens its PR against.
+                    type: string
+                  owner:
+                    description: owner is the GitHub organisation or user that owns
+                      the repository, e.g. "azva-co".
+                    type: string
+                  path:
+                    description: |-
+                      path is the file within the repository that carries the image tag to patch, e.g.
+                      "apps/api/values.yaml".
+                    type: string
+                  repo:
+                    description: repo is the repository name, e.g. "gitops-demo".
+                    type: string
+                  secretRef:
+                    description: |-
+                      secretRef names a Secret in this SignalPolicy's namespace holding a GitHub token with
+                      contents and pull-request write access to Repo, under the key "token".
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  yamlPath:
+                    description: |-
+                      yamlPath is a dot-separated path to the tag field within the YAML document at Path, e.g.
+                      "image.tag". Kept deliberately narrow to a single scalar replacement - not a general
+                      templating or Kustomize/Helm-aware patch - because that's the only fix this slice computes
+                      (see internal/gitops.ComputeFix); broader patch generation is out of scope until a real need
+                      for it exists.
+                    type: string
+                required:
+                - owner
+                - path
+                - repo
+                - secretRef
+                - yamlPath
+                type: object
               minSeverity:
                 default: HIGH
                 description: |-
@@ -100,6 +161,34 @@ spec:
                   type: string
                 minItems: 1
                 type: array
+              pullRequestBudget:
+                description: |-
+                  pullRequestBudget bounds ProposePullRequest actions for this policy's namespace over a
+                  rolling window. Unlike Budget (which may legitimately be unlimited, relying on the
+                  fingerprint gate to bound LLM cost), this is never unlimited when GitOpsRepo is set:omitting
+                  it does not mean "no cap", it means "the conservative built-in default applies" (see
+                  internal/signal.CheckPullRequestBudget) - docs/design.md:189 is explicit that
+                  ProposePullRequest "does not ship without" a cap in the same change, so there is no
+                  configuration that leaves this action uncapped.
+                properties:
+                  maxPullRequests:
+                    description: |-
+                      maxPullRequests is the maximum number of pull requests ProposePullRequest may open within
+                      one window.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  windowSeconds:
+                    default: 86400
+                    description: |-
+                      windowSeconds is the rolling window length. Rolling from whenever the window last reset, not
+                      calendar-aligned - matches Budget.WindowSeconds for the same reason.
+                    format: int32
+                    minimum: 60
+                    type: integer
+                required:
+                - maxPullRequests
+                type: object
               webhook:
                 description: |-
                   webhook configures a generic JSON sink for this namespace - the same URL is used both for
@@ -203,6 +292,18 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              pullRequestWindowStart:
+                description: |-
+                  pullRequestWindowStart is when the current pull request budget window began. Unset means no
+                  window is active yet - mirrors BudgetWindowStart for the same reason.
+                format: date-time
+                type: string
+              pullRequestsOpened:
+                description: |-
+                  pullRequestsOpened is the number of pull requests ProposePullRequest has opened within the
+                  current window.
+                format: int32
+                type: integer
             type: object
         required:
         - spec

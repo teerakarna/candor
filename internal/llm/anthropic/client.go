@@ -74,7 +74,10 @@ func New(apiKey string, opts ...Option) *Client {
 
 // schemaType is the JSON Schema "type" keyword - one constant, not a magic string repeated at
 // every level of hypothesesSchema below.
-const schemaType = "type"
+const (
+	schemaType = "type"
+	typeString = "string"
+)
 
 var hypothesesSchema = map[string]any{
 	schemaType: "object",
@@ -86,11 +89,15 @@ var hypothesesSchema = map[string]any{
 			"items": map[string]any{
 				schemaType: "object",
 				"properties": map[string]any{
-					"cause":      map[string]any{schemaType: "string"},
+					"cause":      map[string]any{schemaType: typeString},
 					"confidence": map[string]any{schemaType: "number", "minimum": 0, "maximum": 1},
-					"rationale":  map[string]any{schemaType: "string"},
+					"rationale":  map[string]any{schemaType: typeString},
+					// Grammar-constrained to exactly the fixed action catalog - the model cannot
+					// emit any other string here, so this is a closed choice, not free-form
+					// output (CONTRIBUTING.md, "No free-form model-selected actions").
+					"recommendedAction": map[string]any{schemaType: typeString, "enum": []string{"Notify", "ProposePullRequest"}},
 				},
-				"required":             []string{"cause", "confidence", "rationale"},
+				"required":             []string{"cause", "confidence", "rationale", "recommendedAction"},
 				"additionalProperties": false,
 			},
 		},
@@ -137,9 +144,10 @@ type apiError struct {
 
 type hypothesesPayload struct {
 	Hypotheses []struct {
-		Cause      string  `json:"cause"`
-		Confidence float64 `json:"confidence"`
-		Rationale  string  `json:"rationale"`
+		Cause             string  `json:"cause"`
+		Confidence        float64 `json:"confidence"`
+		Rationale         string  `json:"rationale"`
+		RecommendedAction string  `json:"recommendedAction"`
 	} `json:"hypotheses"`
 }
 
@@ -203,9 +211,10 @@ func (c *Client) Enrich(ctx context.Context, req llm.Request) (llm.Response, err
 	hypotheses := make([]llm.Hypothesis, 0, len(payload2.Hypotheses))
 	for _, h := range payload2.Hypotheses {
 		hypotheses = append(hypotheses, llm.Hypothesis{
-			Cause:      h.Cause,
-			Confidence: h.Confidence,
-			Rationale:  h.Rationale,
+			Cause:             h.Cause,
+			Confidence:        h.Confidence,
+			Rationale:         h.Rationale,
+			RecommendedAction: h.RecommendedAction,
 		})
 	}
 
@@ -226,6 +235,8 @@ Finding data:
 - Severity: %s
 - Summary: %s
 
-Provide 1-3 ranked hypotheses for the likely underlying cause. For each, give your genuine confidence (0.0-1.0) - do not inflate confidence to seem more certain than the evidence supports. If multiple causes are plausible, rank them and split confidence accordingly rather than picking one to assert.`,
+Provide 1-3 ranked hypotheses for the likely underlying cause. For each, give your genuine confidence (0.0-1.0) - do not inflate confidence to seem more certain than the evidence supports. If multiple causes are plausible, rank them and split confidence accordingly rather than picking one to assert.
+
+For each hypothesis, also set recommendedAction to either "Notify" or "ProposePullRequest". Recommend "ProposePullRequest" only when a vulnerability finding names a specific fixed version that would resolve it and you are reasonably confident a mechanical fix applies; recommend "Notify" otherwise, including whenever you are unsure. This is only a recommendation: the system independently verifies a concrete fix exists before acting on it, so err toward "Notify" rather than guessing.`,
 		req.Provider, req.Kind, req.Name, req.Severity, req.Summary)
 }

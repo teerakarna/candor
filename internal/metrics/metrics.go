@@ -14,6 +14,10 @@ import (
 // convention as SignalPolicy itself.
 const labelNamespace = "namespace"
 
+// labelResult is shared across every *Total counter keyed by outcome (success|error, or a wider
+// result set) - one constant instead of the literal "result" repeated at each declaration.
+const labelResult = "result"
+
 var (
 	// LLMCallsTotal counts real LLM enrichment calls, by result. This is the number the whole
 	// fingerprint/budget mechanism exists to keep small - watch this alongside
@@ -21,7 +25,7 @@ var (
 	LLMCallsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "candor_llm_calls_total",
 		Help: "Total LLM enrichment calls made, by result (success|error).",
-	}, []string{"result"})
+	}, []string{labelResult})
 
 	// EnrichmentSkippedTotal counts every time a Finding was NOT sent to the LLM, by reason. In
 	// steady state (unchanged content) this should dominate LLMCallsTotal by a wide margin - that
@@ -30,6 +34,15 @@ var (
 		Name: "candor_enrichment_skipped_total",
 		Help: "Total times enrichment was skipped without calling the LLM, by reason (not_needed|no_llm_configured|budget_exhausted|suppressed).",
 	}, []string{"reason"})
+
+	// PullRequestsTotal counts every ProposePullRequest decision point that follows a
+	// recommendation to act, by result. Mirrors the LLMCallsTotal/EnrichmentSkippedTotal split for
+	// the action path - the number the per-namespace and (once #39 lands) global pull request
+	// brakes exist to keep small.
+	PullRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "candor_pull_requests_total",
+		Help: "Total ProposePullRequest decisions following a recommendation to act, by result (success|error|no_mechanical_fix|budget_exhausted).",
+	}, []string{labelResult})
 
 	// BudgetCallsUsed and BudgetCallsLimit are gauges per SignalPolicy - cardinality is bounded by
 	// the number of SignalPolicy objects in the cluster (real k8s objects, not user-controlled
@@ -62,10 +75,10 @@ var (
 	WebhookSendsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "candor_webhook_sends_total",
 		Help: "Total webhook notification/digest sends, by result (success|error).",
-	}, []string{"result"})
+	}, []string{labelResult})
 )
 
 func init() {
 	metrics.Registry.MustRegister(LLMCallsTotal, EnrichmentSkippedTotal, BudgetCallsUsed, BudgetCallsLimit,
-		VerificationTransitionsTotal, WebhookSendsTotal)
+		VerificationTransitionsTotal, WebhookSendsTotal, PullRequestsTotal)
 }

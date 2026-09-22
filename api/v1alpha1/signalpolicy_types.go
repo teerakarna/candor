@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -59,6 +60,77 @@ type SignalPolicySpec struct {
 	// no digest for this namespace.
 	// +optional
 	Webhook *Webhook `json:"webhook,omitempty"`
+
+	// gitOpsRepo configures the GitOps repository ProposePullRequest writes to. Optional - omitted
+	// means ProposePullRequest is never selectable for this namespace's Findings, regardless of
+	// what a Hypothesis recommends - the same "not configured, so skip" stance Budget and Webhook
+	// already take.
+	// +optional
+	GitOpsRepo *GitOpsRepo `json:"gitOpsRepo,omitempty"`
+
+	// pullRequestBudget bounds ProposePullRequest actions for this policy's namespace over a
+	// rolling window. Unlike Budget (which may legitimately be unlimited, relying on the
+	// fingerprint gate to bound LLM cost), this is never unlimited when GitOpsRepo is set:omitting
+	// it does not mean "no cap", it means "the conservative built-in default applies" (see
+	// internal/signal.CheckPullRequestBudget) - docs/design.md:189 is explicit that
+	// ProposePullRequest "does not ship without" a cap in the same change, so there is no
+	// configuration that leaves this action uncapped.
+	// +optional
+	PullRequestBudget *PullRequestBudget `json:"pullRequestBudget,omitempty"`
+}
+
+// GitOpsRepo identifies the GitOps repository and file ProposePullRequest patches, and how to
+// authenticate to it. v1 supports GitHub only, matching every other GitHub-native integration
+// point already in Candor (releases, GHCR, cosign) - see #38's discussion for why this beats a
+// generic git library for a capability nothing here asks for yet.
+type GitOpsRepo struct {
+	// owner is the GitHub organisation or user that owns the repository, e.g. "azva-co".
+	// +required
+	Owner string `json:"owner"`
+
+	// repo is the repository name, e.g. "gitops-demo".
+	// +required
+	Repo string `json:"repo"`
+
+	// baseBranch is the branch ProposePullRequest branches from and opens its PR against.
+	// +kubebuilder:default="main"
+	// +optional
+	BaseBranch string `json:"baseBranch,omitempty"`
+
+	// path is the file within the repository that carries the image tag to patch, e.g.
+	// "apps/api/values.yaml".
+	// +required
+	Path string `json:"path"`
+
+	// yamlPath is a dot-separated path to the tag field within the YAML document at Path, e.g.
+	// "image.tag". Kept deliberately narrow to a single scalar replacement - not a general
+	// templating or Kustomize/Helm-aware patch - because that's the only fix this slice computes
+	// (see internal/gitops.ComputeFix); broader patch generation is out of scope until a real need
+	// for it exists.
+	// +required
+	YAMLPath string `json:"yamlPath"`
+
+	// secretRef names a Secret in this SignalPolicy's namespace holding a GitHub token with
+	// contents and pull-request write access to Repo, under the key "token".
+	// +required
+	SecretRef corev1.LocalObjectReference `json:"secretRef"`
+}
+
+// PullRequestBudget bounds ProposePullRequest actions over a rolling window - the per-namespace
+// brake docs/design.md:189 requires in the same change as the action itself.
+type PullRequestBudget struct {
+	// maxPullRequests is the maximum number of pull requests ProposePullRequest may open within
+	// one window.
+	// +kubebuilder:validation:Minimum=1
+	// +required
+	MaxPullRequests int32 `json:"maxPullRequests"`
+
+	// windowSeconds is the rolling window length. Rolling from whenever the window last reset, not
+	// calendar-aligned - matches Budget.WindowSeconds for the same reason.
+	// +kubebuilder:validation:Minimum=60
+	// +kubebuilder:default=86400
+	// +optional
+	WindowSeconds int32 `json:"windowSeconds,omitempty"`
 }
 
 // Webhook is a generic JSON notification sink.
@@ -96,6 +168,16 @@ type SignalPolicyStatus struct {
 	// +optional
 	BudgetCallsUsed int32 `json:"budgetCallsUsed,omitempty"`
 
+	// pullRequestWindowStart is when the current pull request budget window began. Unset means no
+	// window is active yet - mirrors BudgetWindowStart for the same reason.
+	// +optional
+	PullRequestWindowStart *metav1.Time `json:"pullRequestWindowStart,omitempty"`
+
+	// pullRequestsOpened is the number of pull requests ProposePullRequest has opened within the
+	// current window.
+	// +optional
+	PullRequestsOpened int32 `json:"pullRequestsOpened,omitempty"`
+
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -124,6 +206,8 @@ type SignalPolicyStatus struct {
 // +kubebuilder:printcolumn:name="BudgetUsed",type=integer,JSONPath=".status.budgetCallsUsed"
 // +kubebuilder:printcolumn:name="BudgetMax",type=integer,JSONPath=".spec.budget.maxCalls"
 // +kubebuilder:printcolumn:name="Webhook",type=string,JSONPath=".spec.webhook.url"
+// +kubebuilder:printcolumn:name="PRsOpened",type=integer,JSONPath=".status.pullRequestsOpened"
+// +kubebuilder:printcolumn:name="PRsMax",type=integer,JSONPath=".spec.pullRequestBudget.maxPullRequests"
 
 // SignalPolicy is the Schema for the signalpolicies API
 type SignalPolicy struct {
