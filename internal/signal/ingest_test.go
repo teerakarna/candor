@@ -7,12 +7,14 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
+	"github.com/teerakarna/candor/internal/metrics"
 	"github.com/teerakarna/candor/internal/notify"
 )
 
@@ -317,6 +319,41 @@ func TestIngest_ResolvedAgain_NoOp(t *testing.T) {
 	}
 	if result != ResultFiltered {
 		t.Errorf("result = %q, want %q (already resolved - nothing new happened)", result, ResultFiltered)
+	}
+}
+
+// TestIngest_VerificationTransition_RecordsSeverity proves candor_verification_transitions_total
+// carries the finding's severity, not just the outcome - the dashboard's per-severity
+// Resolved/Recurred breakdown depends entirely on this label being correct.
+func TestIngest_VerificationTransition_RecordsSeverity(t *testing.T) {
+	c, scheme := newFakeClient(t, policy("policy", []string{testProvider}, SeverityHigh))
+	ctx := context.Background()
+
+	before := testutil.ToFloat64(metrics.VerificationTransitionsTotal.WithLabelValues("still_present", SeverityCritical))
+	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityCritical), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := testutil.ToFloat64(metrics.VerificationTransitionsTotal.WithLabelValues("still_present", SeverityCritical)) - before; got != 1 {
+		t.Errorf("still_present/CRITICAL increased by %v, want 1", got)
+	}
+
+	// Severity drops below threshold -> resolved. resolveIfOpen must report the finding's last
+	// real severity (CRITICAL), not the new signal's (LOW, which didn't clear the policy).
+	beforeResolved := testutil.ToFloat64(metrics.VerificationTransitionsTotal.WithLabelValues("resolved", SeverityCritical))
+	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityLow), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := testutil.ToFloat64(metrics.VerificationTransitionsTotal.WithLabelValues("resolved", SeverityCritical)) - beforeResolved; got != 1 {
+		t.Errorf("resolved/CRITICAL increased by %v, want 1 (must record the resolved finding's own severity, not the filtered signal's)", got)
+	}
+
+	// Recurring at CRITICAL again must record recurred/CRITICAL, not recurred/LOW.
+	beforeRecurred := testutil.ToFloat64(metrics.VerificationTransitionsTotal.WithLabelValues("recurred", SeverityCritical))
+	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityCritical), nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := testutil.ToFloat64(metrics.VerificationTransitionsTotal.WithLabelValues("recurred", SeverityCritical)) - beforeRecurred; got != 1 {
+		t.Errorf("recurred/CRITICAL increased by %v, want 1", got)
 	}
 }
 

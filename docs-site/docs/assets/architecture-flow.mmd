@@ -1,0 +1,9 @@
+flowchart LR
+    A[Provider<br/>e.g. Trivy VulnerabilityReport] --> B[Signal]
+    B --> C{SignalPolicy<br/>accepts it?}
+    C -- no --> D[Filtered /<br/>resolves a stale Finding]
+    C -- yes --> E[Finding created/updated]
+    E --> F{Fingerprint<br/>changed?}
+    F -- no --> G[No LLM call]
+    F -- yes --> H[LLM enrichment,<br/>gated by budget]
+    H --> I[Ranked hypotheses<br/>+ confidence]

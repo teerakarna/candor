@@ -1,0 +1,27 @@
+# Config for lycheeverse/lychee-action (.github/workflows/link-check.yml).
+# Docs: https://lychee.cli.rs/usage/config-file/
+
+# Retry transient failures (rate limits, momentary DNS/network blips) before treating a link as
+# broken - external sites flake far more often than links actually rot.
+max_retries = 3
+retry_wait_time = 5
+
+# Don't fail the whole run on network timeouts against slow-but-real third-party sites (arXiv,
+# USENIX, etc.) - only a genuine 4xx/5xx (or unresolvable host) counts as broken.
+timeout = 20
+
+# GitHub rate-limits unauthenticated link checks aggressively; the workflow passes GITHUB_TOKEN
+# via the action's `token` input to raise that ceiling rather than excluding github.com.
+
+exclude = [
+  # Placeholder domains used as examples in docs (README/getting-started webhook snippets,
+  # Grafana "point it at whatever" text) - not real endpoints to check.
+  '^https://example\.com',
+  # Local/dev-only URLs referenced in docs (getting-started, hack/grafana-preview README).
+  '^https?://localhost',
+  '^https?://127\.0\.0\.1',
+]
+
+# Anchor/fragment checking is off by default (not configured here) - GitHub's own heading-slug
+# generation doesn't always match lychee's, which would produce noisy false positives unrelated
+# to whether the link's target page actually exists.

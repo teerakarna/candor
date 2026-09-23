@@ -15,20 +15,43 @@ is an architectural stance, not a feature list.
 This project's first draft was a spec for "KubeGuard" — provider-pattern signal ingestion (K8s
 events, Trivy, Falco, Wiz, Prisma Cloud, Datadog CWS), a pluggable local/hosted LLM abstraction,
 non-destructive quarantine, circuit breakers, and phased GitOps auto-remediation. That name collides
-with an existing enterprise product, an AppsCode auth tool, and an arXiv paper — renamed to Candor.
+with three things, renamed to Candor: AppsCode's Guard
+([kubeguard.dev](https://kubeguard.dev/), a Kubernetes auth webhook with a commercial offering),
+a separate Java/Spring security scanner on GitHub, and
+[arXiv 2509.04191](https://arxiv.org/abs/2509.04191), a paper on LLM-assisted Kubernetes hardening.
+The earlier phrasing here listed "an enterprise product" and "an AppsCode auth tool" as separate
+collisions; they are the same project.
 
-Research before building found the exact job already has direct competitors:
+Research before building found the exact job already has direct competitors.
 
-- **[Kubernaut](https://github.com/jordigilh/kubernaut)** — closest analogue. Alert → LLM
-  investigation → remediation, with an effectiveness monitor that scores whether fixes worked. The
-  only OSS project with an outcome feedback loop, but it's deferred to V1.1 pending 8+ weeks of
-  data, and is currently blocked by an unrelated TLS bug.
+> **Re-verified 2026-09-12.** This section was excluded from the gaps table's earlier verification
+> pass and had decayed badly. The Kubernaut entry was substantively wrong, and the HolmesGPT quote
+> was misattributed. Both corrected in place below.
+
+- **[Kubernaut](https://github.com/jordigilh/kubernaut)** — closest analogue. Alert, LLM
+  investigation, remediation, with approval gates, OPA policies and audit trails.
+  **Its effectiveness monitor is no longer deferred.** DD-017 v1.0 (Dec 2025) deferred it entirely
+  to V1.1, which is what this doc previously recorded. DD-017 v2.0 (Feb 2026) reversed that:
+  **Level 1 (automated assessment) moved into V1.0 and has shipped**; only Level 2 (AI-powered
+  analysis) remains V1.1, and it is Level 2 alone that needs 8+ weeks of remediation data. The
+  project is at v1.6.0-rc12 (2026-09-11) and pushed to daily.
+  The previous claim that it was "currently blocked by an unrelated TLS bug" is unsupported: the
+  TLS items in its tracker are feature work (TLS-only listeners, mTLS ACLs), not a blocker.
+  The previous claim that it is "the only OSS project with an outcome feedback loop" is an
+  exclusivity assertion that was never verifiable and is dropped.
+
+  **This weakens gap 4 below.** A competitor has shipped automated post-remediation effectiveness
+  assessment. Candor's verification loop is no longer a differentiator by existence, only by shape
+  (published as a metric, per-finding, in a single binary). Say that, not more.
 - **[k8sgpt](https://github.com/k8sgpt-ai/k8sgpt) /
   [k8sgpt-operator](https://github.com/k8sgpt-ai/k8sgpt-operator)** — CNCF Sandbox, ~8k stars,
   actively maintained. Deterministic analyzers + LLM explanation. Its own issue tracker is the
   primary evidence base below.
-- **[HolmesGPT](https://github.com/HolmesGPT/holmesgpt)** — read-only investigation, strongest
-  runbook integration in the field. Its own finding: "without runbooks, the model just guesses."
+- **[HolmesGPT](https://github.com/HolmesGPT/holmesgpt)** — read-only investigation, strong runbook
+  integration, and a CNCF Sandbox project. "Without runbooks, the model just guesses" is a real
+  quote and a good one, but it is **not HolmesGPT's own finding**, as this doc previously claimed:
+  it comes from an SRE team at STCLab writing on the CNCF blog about running HolmesGPT against
+  production EKS clusters. Attribute it to them, not to the project.
 - **[kagent](https://github.com/kagent-dev/kagent)** — generic agent runtime, not a remediation
   product. Its human-in-the-loop writeup states the safety line this project also follows: "Fully
   autonomous agents are fine for read-only operations. For anything that changes state, you need a
@@ -49,15 +72,27 @@ Given that, being *better* than these — not merely different — is the only d
 
 ## The eight gaps, and how Candor answers them
 
+> **Citations re-verified 2026-09-12**, prompted by drafting a public blog post off this doc.
+> Scope of that check: this gaps table, and the "trust problem" section below it. Four claims were
+> wrong or overstated and are corrected in place, marked inline. Two could not be verified at all
+> and were replaced with the weaker claim that *is* supported.
+>
+> **Not re-verified**: the "Origin and prior art" section above (only repo descriptions and star
+> counts were spot-checked, not the specific claims about Kubernaut's internals or roadmap, some of
+> which are time-sensitive), and the Palark review in row 8.
+>
+> The lesson is worth keeping: an evidence base decays. Issues get fixed and closed, and projects
+> ship the thing you said they never shipped. **Re-check before citing any of this publicly.**
+
 | # | Gap in the incumbents (evidenced) | Candor's answer |
 |---|---|---|
-| 1 | No cost model. k8sgpt-operator#769: 164 findings → 9,300 Bedrock calls in 3 days. #730: analysis runs every reconcile (~30s) regardless of configured interval, no last-analysis tracking. #419 (decouple LLM spend from reconciles) closed as stale. | Content-addressed fingerprinting: hash (resource identity + relevant spec/status subset + analyzer verdict). LLM invoked **once per distinct fingerprint, ever**. Hard budget ceiling per window; on exhaustion, degrade to deterministic-only and say so. |
+| 1 | No cost model. k8sgpt-operator#769 (open): hourly scan configured, 164 findings, ~9,300 Bedrock calls in 3 days per CloudTrail. #730 (fixed Feb 2026): the mechanism behind that class of problem: change detection compared result hashes, found them identical, and updated anyway. Note the interval itself *was* being respected; the earlier claim here that it was ignored was wrong, corrected 2026-09-12 on re-verification. #419 (decouple LLM request timing from reconciles) sat 2+ years, closed Aug 2026 with "Closing as stale ... not on the current roadmap." | Content-addressed fingerprinting: hash (resource identity + relevant spec/status subset + analyzer verdict). LLM invoked **once per distinct fingerprint, ever**. Hard budget ceiling per window; on exhaustion, degrade to deterministic-only and say so. |
 | 2 | No deduplication — an alert storm costs N× | Fingerprint collapses a storm to one enrichment call. |
-| 3 | No suppression, so the tool recreates the fatigue it claims to fix. k8sgpt#372 ("Exclude a list of known issues") open since May 2023, never shipped: "We have no consensus on the design yet." | `Suppression` CRD mutes a fingerprint with a required reason and optional expiry. Exact by construction — if the underlying state changes, the fingerprint changes and the finding resurfaces on its own. |
-| 4 | No verification of remediation outcomes. k8sgpt's own `AUTO_REMEDIATION.md` lists "Re-analysis proving findings are resolved" as not implemented. | Every finding carries a verification outcome (resolved / still-present / recurred / superseded), re-checked after state changes, exposed as metrics and status. |
-| 5 | Writes to the cluster — breaks GitOps shops. Practitioner: "my FluxCD is going revert since you violated principle of 'All goes through GitOps'." | Default write path is a **pull request** against the GitOps repo. Direct mutation only for resources not under GitOps management, gated behind Enforcing mode. |
+| 3 | No suppression, so the tool recreates the fatigue it claims to fix. k8sgpt#372 ("Exclude a list of known issues") open since May 2023, still open, never shipped. Maintainer, ten days in: "We have no concensus on the design yet, do you want to propose something first?" (sic). A contributor offered a draft proposal; it never landed. Users were still asking in 2025. | `Suppression` CRD mutes a fingerprint with a required reason and optional expiry. Exact by construction — if the underlying state changes, the fingerprint changes and the finding resurfaces on its own. |
+| 4 | Verification of remediation outcomes is partial, and this gap has narrowed since it was written (see "Origin and prior art": Kubernaut shipped Level 1 automated effectiveness assessment in V1.0, Feb 2026). k8sgpt-operator's `AUTO_REMEDIATION.md` checks Deployment rollout + replica availability before treating a finding as resolved, but lists "targeted re-analysis that proves the original finding is resolved" as future work, and states "a missing `Result` remains the finding-resolution signal", i.e. absence of a complaint is the proof. (Corrected 2026-09-12: the earlier claim that nothing is checked at all overstated this.) | Every finding carries a verification outcome (resolved / still-present / recurred / superseded), re-checked after state changes, exposed as metrics and status. |
+| 5 | Writes to the cluster, which breaks GitOps shops. Structural, not anecdotal: Flux and ArgoCD revert drift from Git by design, so a direct cluster patch means two automated systems fighting over the same object. (A practitioner quote previously cited here could not be re-verified on 2026-09-12 and was removed; the structural argument stands on its own and needs no quote.) | Default write path is a **pull request** against the GitOps repo. Direct mutation only for resources not under GitOps management, gated behind Enforcing mode. |
 | 6 | Prompt injection unaddressed, in a security tool | All ingested telemetry is untrusted input. Structured extraction before prompting; model output selects from a **fixed action catalog** — it can never emit a free-form action. |
-| 7 | Weakest model shipped as default. arXiv 2509.04191 (the KubeGuard paper) benchmarks Llama-3.1-8B at 0.79–0.81 F1 vs GPT-4o at 0.93–1.00 on exactly these manifest-analysis tasks. | Strong hosted model (Anthropic) as the v1 default. Per-model accuracy is measured and published against a fixture suite, not asserted. |
+| 7 | Weakest model shipped as default. arXiv 2509.04191 (the KubeGuard paper) benchmarks both on exactly these manifest-analysis tasks. GPT-4o: 0.929-1.00 F1 across the five tasks. Llama-3.1-8B: **0.504-0.808**, worst on NetworkPolicy Refinement (0.504 vs 0.961) and Role Creation (0.607 vs 1.00). (Corrected 2026-09-12: the earlier "0.79-0.81" figure cited here took only the model's two best scores and understated the real gap.) | Strong hosted model (Anthropic) as the v1 default. Per-model accuracy is measured and published against a fixture suite, not asserted. |
 | 8 | No confidence modelling, no self-metrics, no least-privilege RBAC. Palark's k8sgpt review: non-deterministic recommendations across identical runs; once suggested rebooting the cluster; missed an initContainer `ErrImagePull`. | Ranked competing hypotheses with confidence, never one asserted cause. Full self-observability. Operator ServiceAccount is least-privilege, read-only by default, verified by a test that attempts a write and confirms denial. |
 
 Plus a plain operational advantage: Kubernaut needs 9+ microservices. Candor is one operator binary
@@ -68,15 +103,23 @@ and a Helm chart — a difference in deployment and maintenance burden that user
 - Majors & Hebert, SREcon25, ["AIOps: Prove It!"](https://www.usenix.org/conference/srecon25americas/presentation/majors) —
   an open letter asking vendors for "data on how often your system produces useful, actionable
   results." No OSS tool in this space has answered it.
-- The Register (696 respondents): 60% cite lack of trust as the top AIOps adoption barrier, 59%
-  require near-perfect accuracy before adoption. DevOps.com: only 12% use AIOps day-to-day, 7.5%
-  call it high-value.
+- The Register with NeuBird AI, April 2026 (696 respondents): 60% cite lack of trust as the top
+  AIOps adoption barrier (ROI, security and data quality each ~12-13%), 59% require near-perfect
+  accuracy before adoption, and adoption matches that: 73% not using AIOps at all, 19% piloting,
+  8% in production. (A "12% use AIOps day-to-day / 7.5% call it high-value" figure previously cited
+  here could not be verified on 2026-09-12 and was replaced with these, which were.)
 - "A single confident answer that's wrong is worse than no answer, because it sends a human down a
-  road with the agent's credibility behind it." (HN, HyperProbe thread)
-- LangChain's own lesson, cited approvingly here: a health check fanned out to ~20 Sonnet calls per
-  run even when healthy; collapsing to one Haiku call cut cost 95–99% with no loss in detection.
-  Candor's fingerprinting generalizes this fix structurally rather than requiring each integration to
-  discover it independently.
+  road with the agent's credibility behind it." Commenter IgorVoytyuk on the
+  [HyperProbe Launch HN thread](https://news.ycombinator.com/item?id=49185389), describing three
+  incidents where confident-but-wrong diagnoses burned real debugging time. Verified verbatim
+  2026-09-12.
+- Model-routing economics generally: sending simple, deterministic checks to a cheap model and
+  reserving the expensive one for reasoning-heavy work is widely reported to cut cost by roughly
+  95%. (A specific LangChain anecdote previously cited here, "~20 Sonnet calls per health check
+  run, collapsed to one Haiku call", could not be re-verified on 2026-09-12 and has been reduced
+  to the general, corroborated claim. **Do not cite the specific version publicly without finding
+  the source first.**) Candor's fingerprinting attacks the same cost problem structurally, so each
+  integration does not have to rediscover it.
 
 ## Interaction surfaces
 
@@ -115,6 +158,46 @@ are plausible later additions, not v1.
 - **CRDs**: `SignalPolicy` (scope, providers, guardrails, mode, budget), `Finding` (one per
   fingerprint; ranked hypotheses, confidence, verification outcome), `Suppression`.
 - **API group**: `candor.dev/v1alpha1`.
+
+## Every accelerator ships with its brake
+
+**Non-negotiable, and it governs every slice below.** Any mechanism that can act, spend, or
+generate must have its limit defined and enforced in the *same change* that introduces it. Not the
+next slice, not "before v1". The same pull request.
+
+A brake added later is not a brake, because the window in which it was missing is exactly the
+window in which the thing runs unattended and nobody is watching for a failure mode that has not
+been imagined yet. The worst shape is the self-multiplying one: an action that produces a signal
+that triggers the same action.
+
+What counts as a brake:
+
+- A hard ceiling with a defined window (`Budget.maxCalls`), and a defined behaviour on hitting it
+  that **degrades rather than fails**.
+- A gate that makes repeat work a no-op (`NeedsEnrichment`, keyed on content, not time).
+- A kill switch a human can reach without a rebuild, and which is visible in status and Events.
+- A test that proves the limit actually holds against real volume, not that the accounting is
+  internally consistent. `TestFindingReconciler_BudgetCostRegression` is the pattern: N genuinely
+  distinct items against a ceiling of 2, asserting exactly 2 calls happen.
+
+**Where this stands today, honestly.** Every brake Candor has is on the *cost* path: the
+fingerprint gate, the budget ceiling, suppression. The *action* path has none, because until slice
+9 there are no actions. The circuit breakers listed under "What the original spec got right" (max
+disruption percentage, global rate limit, panic switch dropping to Audit mode) are **design intent,
+not implemented code**, as of 2026-09-12.
+
+**This binds slice 9 specifically.** `ProposePullRequest` is the first mechanism that writes
+anything outward. It does not ship without, in the same slice:
+
+- a cap on pull requests opened per window, per namespace, that degrades to Notify on exhaustion
+- a global rate limit across all namespaces, so one noisy provider cannot exhaust the whole cluster's
+  allowance
+- a panic switch that drops to Audit mode and is reachable by editing a CRD, not by redeploying
+- a test that proves each of those holds under volume
+
+The same rule applies to anything that generates artifacts to reduce noise. A mechanism that
+answers "too much to deal with" by producing more things to deal with has to justify its output
+budget explicitly, or it is not a solution.
 
 ## Delivery slices
 
@@ -195,6 +278,32 @@ are plausible later additions, not v1.
    schema validation - Grafana's save API doesn't reject a bad panel type or query), and
    `hack/grafana-preview/` is a local `docker compose` stack (fake metrics + Prometheus + Grafana,
    both auto-provisioned) for a human visual check without a real cluster.
+
+   Redesigned after review: the original layout led with Candor's own cost/self-observability
+   metrics, which reads as "look how efficient we are" rather than answering the question an
+   operator actually opens the dashboard for - what needs attention, right now. Fixing that
+   exposed a real gap: none of the existing metrics represent a live current count of Findings by
+   severity, only transition counters. Added `candor_findings_current{namespace,severity,outcome}`
+   as a Prometheus `Collector` (`internal/metrics.FindingsCollector`) - computed fresh from the
+   manager's cached client on every scrape, the same reasoning kube-state-metrics is built on,
+   since a plain counter can't correctly express "how many are open right now" (transitions don't
+   net out to a current count). `candor_verification_transitions_total` also gained a `severity`
+   label (previously `outcome` only) - refined several times more after review. Each severity
+   tile shows three values together (Outstanding, Resolved (7d), Recurred (7d)) rather than a
+   separate panel per concept, since an operator wants one place per severity to answer "does this
+   need action or is it handled" - "Recurred", not "Recurring", to match the past-tense,
+   discrete-event framing of "Resolved" and the underlying `VerificationRecurred` constant, not an
+   ongoing state. Laid out as four tiles side by side (one per severity), each internally split
+   into three stacked horizontal bands - not a single multi-value stat panel, since Grafana's own
+   "vertical orientation" setting did not reliably stack multiple values the way its documentation
+   describes; explicit per-value panels positioned via grid coordinates give deterministic control
+   instead of relying on that. Also fixed two real bugs caught in review: the multi-value stat
+   panels were issuing range queries while asking to display every returned value, rendering as a
+   wall of one box per timestamp sample instead of one current number (fixed with `instant: true`
+   on every such target); and `Resolved`/`Recurred` counts wrapped in `floor()`, not left to round
+   naturally, since `increase()` over a partial window can extrapolate a fractional value and
+   rounding up would claim an event happened that isn't actually confirmed. The original drill-down
+   panels remain, grouped under labelled rows.
 8. Generic webhook sink + periodic digest report. **Done.** `SignalPolicy.spec.webhook.url`
    (optional) is the single opt-in for both: `internal/notify` is a small, vendor-agnostic package
    that POSTs a JSON payload and knows nothing about Slack/Teams/PagerDuty - "one code path", per

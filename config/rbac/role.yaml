@@ -23,6 +23,7 @@ rules:
   - candor.dev
   resources:
   - findings
+  - operatingpolicies
   - signalpolicies
   - suppressions
   verbs:
@@ -37,6 +38,7 @@ rules:
   - candor.dev
   resources:
   - findings/finalizers
+  - operatingpolicies/finalizers
   - signalpolicies/finalizers
   - suppressions/finalizers
   verbs:
@@ -45,6 +47,7 @@ rules:
   - candor.dev
   resources:
   - findings/status
+  - operatingpolicies/status
   - signalpolicies/status
   - suppressions/status
   verbs:

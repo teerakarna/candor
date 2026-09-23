@@ -32,14 +32,17 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
 	"github.com/teerakarna/candor/internal/controller"
+	"github.com/teerakarna/candor/internal/gitops"
 	"github.com/teerakarna/candor/internal/llm"
 	"github.com/teerakarna/candor/internal/llm/anthropic"
+	"github.com/teerakarna/candor/internal/metrics"
 	"github.com/teerakarna/candor/internal/provider"
 	"github.com/teerakarna/candor/internal/provider/trivy"
 	// +kubebuilder:scaffold:imports
@@ -187,6 +190,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	// A collector, not a package-level metric var like the rest of internal/metrics - it computes
+	// candor_findings_current fresh from the manager's cached client on every scrape, the same
+	// pattern kube-state-metrics uses for "current count of X" metrics a plain counter can't
+	// express correctly.
+	ctrlmetrics.Registry.MustRegister(&metrics.FindingsCollector{Reader: mgr.GetClient()})
+
 	if err := (&controller.SignalPolicyReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -214,6 +223,10 @@ func main() {
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		LLM:    llmClient,
+		// Unlike LLM, this is always wired up rather than gated on an env var: GitHubOpener has
+		// no global "enabled" concept of its own - ProposePullRequest only ever activates
+		// per-namespace, opt-in, via that namespace's own SignalPolicy.Spec.GitOpsRepo.
+		GitOps: &gitops.GitHubOpener{},
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "finding")
 		os.Exit(1)
@@ -240,6 +253,13 @@ func main() {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "trivy-provider")
+		os.Exit(1)
+	}
+	if err := (&controller.OperatingPolicyReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "operatingpolicy")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

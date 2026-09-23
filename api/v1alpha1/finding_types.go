@@ -67,6 +67,16 @@ type FindingSource struct {
 	RefName string `json:"refName"`
 }
 
+// Candor's fixed action catalog (docs/design.md, "Action catalog"). A Hypothesis's
+// RecommendedAction is always one of these two strings, or empty - never a free-form value
+// emitted by the model and executed directly (CONTRIBUTING.md, "No free-form model-selected
+// actions": model output selects from the fixed catalog, it never emits an action that gets
+// executed directly).
+const (
+	ActionNotify             = "Notify"
+	ActionProposePullRequest = "ProposePullRequest"
+)
+
 // Hypothesis is one possible explanation for a Finding, with the LLM's own confidence in it.
 type Hypothesis struct {
 	// cause is a short description of a plausible underlying cause.
@@ -89,6 +99,18 @@ type Hypothesis struct {
 	// rationale is a short explanation for why this cause is plausible.
 	// +optional
 	Rationale string `json:"rationale,omitempty"`
+
+	// recommendedAction is the model's suggestion for which action from Candor's fixed catalog
+	// this hypothesis warrants. Advisory only, never authorizing: FindingReconciler independently
+	// verifies a concrete, mechanical fix exists (internal/gitops.ComputeFix) before ever acting
+	// on ProposePullRequest, and an empty or unrecognised value is always treated as Notify - the
+	// same "unsafe input degrades to the safe default" posture as the budget ceiling. A crafted or
+	// injected value here can at most suppress an action that should have happened, never cause
+	// one that shouldn't (see docs/design.md pillar 6 and the prompt-injection test in
+	// internal/llm/anthropic).
+	// +kubebuilder:validation:Enum=Notify;ProposePullRequest
+	// +optional
+	RecommendedAction string `json:"recommendedAction,omitempty"`
 }
 
 // FindingStatus defines the observed state of Finding.
@@ -131,6 +153,25 @@ type FindingStatus struct {
 	// +kubebuilder:validation:Enum=StillPresent;Resolved;Recurred
 	// +optional
 	VerificationOutcome string `json:"verificationOutcome,omitempty"`
+
+	// proposedPullRequestURL is the URL of the pull request Candor opened against
+	// SignalPolicy.Spec.GitOpsRepo for this Finding's top hypothesis, if any. Empty means no PR
+	// has been opened - either ProposePullRequest was never selected, no concrete fix could be
+	// computed, or the per-namespace pull request budget was exhausted (see internal/gitops and
+	// internal/controller.FindingReconciler). Never cleared once set, even if the Finding later
+	// resolves - it's the record that a PR was proposed, not a live status of that PR.
+	// +optional
+	ProposedPullRequestURL string `json:"proposedPullRequestURL,omitempty"`
+
+	// proposedPullRequestFingerprint is the Fingerprint value ProposePullRequest was last attempted
+	// against - the same "no repeat work for unchanged content" gate EnrichedFingerprint already
+	// applies to LLM calls, applied here to pull request attempts and the budget they spend. Set
+	// on a successful pull request or on a deterministic "no mechanical fix exists for this
+	// content" verdict (internal/gitops.ComputeFix) - never on a transient error opening the pull
+	// request, or on the per-namespace pull request budget being exhausted, so both of those retry
+	// on a later reconcile rather than being given up on permanently.
+	// +optional
+	ProposedPullRequestFingerprint string `json:"proposedPullRequestFingerprint,omitempty"`
 
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
