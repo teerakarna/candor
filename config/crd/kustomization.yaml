@@ -5,6 +5,7 @@ resources:
 - bases/candor.dev_signalpolicies.yaml
 - bases/candor.dev_findings.yaml
 - bases/candor.dev_suppressions.yaml
+- bases/candor.dev_operatingpolicies.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

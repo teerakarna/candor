@@ -7,9 +7,9 @@ without needing a real Kubernetes cluster, a real Candor deployment, or real Tri
 Three services:
 
 - **fake-metrics** (`fake_metrics.py`) - serves `/metrics` in Prometheus text format, using the
-  exact metric and label names `internal/metrics/metrics.go` registers for real
-  (`candor_llm_calls_total`, `candor_enrichment_skipped_total`,
-  `candor_verification_transitions_total`, `candor_signalpolicy_budget_calls_used`/`_limit`).
+  exact metric and label names `internal/metrics` registers for real (`candor_llm_calls_total`,
+  `candor_enrichment_skipped_total`, `candor_verification_transitions_total`,
+  `candor_signalpolicy_budget_calls_used`/`_limit`, `candor_findings_current`).
   Values drift a little every few seconds so the dashboard's timeseries panels actually move.
 - **prometheus** - scrapes fake-metrics every 5s.
 - **grafana** - both the Prometheus datasource and the dashboard itself are auto-provisioned

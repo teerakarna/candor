@@ -55,11 +55,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   resolved, or recurred, and a periodic per-namespace digest (`CANDOR_DIGEST_INTERVAL`, default
   24h) tallying Findings by verification outcome and severity. Both are best-effort - a failure is
   logged and counted (`candor_webhook_sends_total`), never returned as an error.
+- `candor_findings_current{namespace,severity,outcome}`: a live gauge (Prometheus `Collector`,
+  computed fresh on every scrape from the manager's cached client, not a package-level counter
+  like every other metric here) reporting how many Findings currently exist per severity and
+  verification outcome. None of the existing metrics could answer "how many findings are open
+  right now" - they're all transition counters or self-observability. This is the metric behind
+  the redesigned dashboard's landing status tiles.
+- `candor_verification_transitions_total` now also carries a `severity` label (previously
+  `outcome` only), so Resolved/Recurred can be broken down per severity, not just in aggregate.
+- Redesigned Grafana dashboard: leads with four colour-coded severity tiles (Critical/High/Medium/
+  Low), each split into three stacked bands - Outstanding, Resolved (7d), Recurred (7d) - so the
+  first thing an operator sees is what needs action, what's been taken care of, and what's come
+  back, not Candor's own cost metrics. `Resolved`/`Recurred` counts are floored (`floor(...)`),
+  not rounded: `increase()` over a partial window can extrapolate a fractional value, and rounding
+  up would claim an event happened that isn't actually confirmed yet. Historical trends and
+  cost/operator-health panels (LLM calls, budget usage, enrichment-avoidance ratio) are still
+  present, grouped under labelled rows, as drill-down rather than the first view.
+
+- `ProposePullRequest` (slice 9), the first mechanism that writes anything outward: the LLM
+  recommends `Notify` or `ProposePullRequest` per hypothesis (grammar-constrained to that closed
+  catalog - it never authorizes a write on its own), but `internal/gitops.ComputeFix`
+  independently, mechanically verifies a fix actually exists before anything happens - for a Trivy
+  `VulnerabilityReport`, only when every reported vulnerability agrees on one `fixedVersion`. No
+  such fix, no PR, regardless of what the model recommended. `internal/gitops.GitHubOpener` opens
+  the PR: branches, patches one YAML path, commits, and carries the finding plus ranked hypotheses
+  in the PR body - "the pull request is also a report."
+- `SignalPolicy.spec.gitOpsRepo` + `spec.pullRequestBudget`: the per-namespace cap on
+  `ProposePullRequest`. Unlike the LLM budget, omitting it never means unlimited - a conservative
+  built-in default (1 PR/24h) applies instead, so the action can't ship without a brake in the same
+  change (docs/design.md, "every accelerator ships with its brake").
+- `OperatingPolicy`: Candor's first cluster-scoped CRD, a deliberate singleton. Its
+  `spec.pullRequestRateLimit` bounds `ProposePullRequest` across every namespace, checked in
+  addition to and after the per-namespace budget - a namespace comfortably under its own cap can
+  still be refused once the cluster-wide ceiling is spent by everyone else. Unlike every other
+  budget here, no `OperatingPolicy` existing at all denies rather than defaulting to a number -
+  there's no object to persist a count against, so allowing anyway would just be an uncounted brake.
+- `OperatingPolicy.spec.mode` (`Active`/`Audit`): the CRD-reachable panic switch, checked before
+  either budget or the fix computation, so flipping to `Audit` is a genuine full stop, not "still
+  counted but not executed". `OperatingPolicyReconciler` emits a `ModeChanged` Event on every real
+  transition (visible in status and Events, per the brake definition, not status alone).
+- All three brakes above are volume-tested through the real reconciler, not just asserted: N
+  distinct Findings against a small per-namespace ceiling, two namespaces each under their own
+  budget but exceeding a shared global one, and flipping to `Audit` mid-run rather than starting
+  there - the same "prove it holds under real volume" standard
+  `TestFindingReconciler_BudgetCostRegression` set for the LLM budget.
 
 ### Fixed
 
 - `candor_enrichment_skipped_total{reason=no_llm_configured}` is now actually incremented - it was
   documented in the metric's help text since the budget-ceiling slice but never wired up.
+- Pull request budget could be exhausted without ever opening a PR: both new budgets persisted
+  their spend the moment they allowed an attempt, not on actual success, so a misconfigured
+  `gitOpsRepo` Secret (missing, wrong key) failed identically on every retry and silently burned
+  the whole allowance - as low as 1 PR/24h by default - with zero PRs ever opened. The Secret is
+  now validated before either budget is touched, and branch creation is idempotent so a retry after
+  an earlier partial failure doesn't fail forever either.
+
+### Security
+
+- Dropped a cluster-wide `get` on Secrets from the controller's ClusterRole, caught by Trivy's
+  config scan (KSV-0041) before merge - equivalent to cluster-admin in most clusters, since it
+  could read every Secret in the cluster, not just the one `gitOpsRepo` needs. A namespace enabling
+  `gitOpsRepo` now grants the controller's ServiceAccount a namespaced Role naming that one Secret
+  explicitly, the same opt-in-per-namespace posture `SignalPolicy` itself already requires.
 
 ### Dev tooling
 
@@ -70,3 +128,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `hack/grafana-preview/`: a `docker compose` stack (fake metrics generator + Prometheus + Grafana,
   both auto-provisioned) for visually checking the dashboard locally without a real cluster or
   operator - see its README.
+- `render-diagrams.yml`: renders `docs-site/docs/assets/*.mmd` and fails the check if the checked-
+  in SVG doesn't match, with instructions to regenerate locally. Originally auto-committed the
+  render back to the branch; changed after that produced an unsigned bot commit that silently
+  blocked merging under this repo's required-signed-commits branch protection, on a completely
+  green PR - a bot can't cleanly sign its own commits without a real key in CI, so failing with
+  instructions is simpler and just as effective.
+- `make dev-up`/`dev-status`/`dev-down`: a persistent local Kind cluster, separate from the
+  ephemeral one `make test-e2e` creates and destroys around itself. Installs Candor's CRDs plus the
+  pinned Trivy `VulnerabilityReport` CRD (so a hand-crafted report works without a real Trivy
+  Operator), builds the image, and deploys it - safe to re-run after a code change to rebuild and
+  redeploy onto the same cluster.
+- e2e smoke test: applies a real `SignalPolicy` and a schema-validated `VulnerabilityReport`, waits
+  for a `Finding` to appear. Every other e2e check proves the manager comes up; this is the first
+  one that proves the actual ingest-to-Finding pipeline works, not just that the pod is running.

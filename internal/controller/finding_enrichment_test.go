@@ -38,6 +38,16 @@ const (
 // named "policy", and there's no reason each file should repeat the literal.
 const testPolicyName = "policy"
 
+// Shared across this package's test files - every test Finding here watches the same fictional
+// Deployment via the same fictional VulnerabilityReport, and every fake enrichment response uses
+// the same example hypothesis, so there's no reason each file should repeat these literals.
+const (
+	testKind               = "Deployment"
+	testResourceName       = "api"
+	testRefKindVulnReport  = "VulnerabilityReport"
+	testCauseOutdatedImage = "outdated base image"
+)
+
 // countingLLM is a fake llm.Client that counts calls and returns a fixed response - enough to
 // prove the gate around it, without needing a real API key or network access in CI.
 type countingLLM struct {
@@ -56,8 +66,8 @@ func newTestFinding(name string) *candorv1alpha1.Finding {
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: corev1.NamespaceDefault},
 		Spec: candorv1alpha1.FindingSpec{
 			Source: candorv1alpha1.FindingSource{
-				Provider: testProvider, Kind: "Deployment", Name: "api",
-				RefKind: "VulnerabilityReport", RefName: "api-report",
+				Provider: testProvider, Kind: testKind, Name: testResourceName,
+				RefKind: testRefKindVulnReport, RefName: "api-report",
 			},
 			Severity: "CRITICAL",
 			Summary:  "3 critical vulns",
@@ -93,7 +103,7 @@ func TestFindingReconciler_NeedsEnrichment_CallsLLMOnce(t *testing.T) {
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(finding).WithStatusSubresource(&candorv1alpha1.Finding{}).Build()
 
 	fakeLLM := &countingLLM{resp: llm.Response{Hypotheses: []llm.Hypothesis{
-		{Cause: "outdated base image", Confidence: 0.82, Rationale: "known CVE fixed upstream"},
+		{Cause: testCauseOutdatedImage, Confidence: 0.82, Rationale: "known CVE fixed upstream"},
 	}}}
 	r := &FindingReconciler{Client: c, Scheme: scheme, LLM: fakeLLM}
 
@@ -117,7 +127,7 @@ func TestFindingReconciler_NeedsEnrichment_CallsLLMOnce(t *testing.T) {
 		t.Fatalf("got %d hypotheses, want 1", len(got.Status.Hypotheses))
 	}
 	h := got.Status.Hypotheses[0]
-	if h.Cause != "outdated base image" || h.Confidence != 82 || h.Rationale == "" {
+	if h.Cause != testCauseOutdatedImage || h.Confidence != 82 || h.Rationale == "" {
 		t.Errorf("hypothesis = %+v, unexpected content (want Confidence=82, the 0.82 float converted to a percentage)", h)
 	}
 }
