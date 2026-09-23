@@ -272,6 +272,22 @@ func (r *FindingReconciler) tryProposePullRequest(ctx context.Context, finding *
 		return r.markPullRequestFingerprintAttempted(ctx, finding)
 	}
 
+	// Read and validate the Secret before either budget below is touched. Both budgets persist
+	// their spend the moment they say "allowed", not on actual success - a misconfigured Secret
+	// (missing, wrong key) fails identically on every retry, and reordering this ahead of them
+	// means that failure keeps surfacing as a visible error instead of silently exhausting a
+	// namespace's or the cluster's entire pull request allowance (as low as 1/24h) on an attempt
+	// that could never have succeeded regardless of budget.
+	secret := &corev1.Secret{}
+	secretKey := client.ObjectKey{Namespace: policy.Namespace, Name: policy.Spec.GitOpsRepo.SecretRef.Name}
+	if err := r.Get(ctx, secretKey, secret); err != nil {
+		return fmt.Errorf("getting GitOpsRepo secret %s: %w", secretKey, err)
+	}
+	token := string(secret.Data["token"])
+	if token == "" {
+		return fmt.Errorf("secret %s has no data key %q", secretKey, "token")
+	}
+
 	allowed, err := signal.CheckPullRequestBudget(ctx, r.Client, policy)
 	if err != nil {
 		return fmt.Errorf("checking pull request budget for SignalPolicy %s/%s: %w", policy.Namespace, policy.Name, err)
@@ -280,7 +296,7 @@ func (r *FindingReconciler) tryProposePullRequest(ctx context.Context, finding *
 		metrics.PullRequestsTotal.WithLabelValues("budget_exhausted").Inc()
 		r.Recorder.Eventf(policy, corev1.EventTypeWarning, "PullRequestBudgetExhausted",
 			"ProposePullRequest for %s/%s skipped - pull request budget exhausted (%d/%d this window)",
-			finding.Namespace, finding.Name, policy.Status.PullRequestsOpened, pullRequestMax(policy))
+			finding.Namespace, finding.Name, policy.Status.PullRequestsOpened, signal.MaxPullRequests(policy))
 		return nil
 	}
 
@@ -294,20 +310,10 @@ func (r *FindingReconciler) tryProposePullRequest(ctx context.Context, finding *
 	}
 	if !globalAllowed {
 		metrics.PullRequestsTotal.WithLabelValues("global_budget_exhausted").Inc()
-		r.Recorder.Eventf(policy, corev1.EventTypeWarning, "GlobalPullRequestBudgetExhausted",
+		r.Recorder.Eventf(operatingPolicy, corev1.EventTypeWarning, "GlobalPullRequestBudgetExhausted",
 			"ProposePullRequest for %s/%s skipped - cluster-wide pull request budget exhausted",
 			finding.Namespace, finding.Name)
 		return nil
-	}
-
-	secret := &corev1.Secret{}
-	secretKey := client.ObjectKey{Namespace: policy.Namespace, Name: policy.Spec.GitOpsRepo.SecretRef.Name}
-	if err := r.Get(ctx, secretKey, secret); err != nil {
-		return fmt.Errorf("getting GitOpsRepo secret %s: %w", secretKey, err)
-	}
-	token := string(secret.Data["token"])
-	if token == "" {
-		return fmt.Errorf("secret %s has no data key %q", secretKey, "token")
 	}
 
 	prURL, err := r.GitOps.Open(ctx, token, policy.Spec.GitOpsRepo, fix, finding)
@@ -337,16 +343,6 @@ func (r *FindingReconciler) markPullRequestFingerprintAttempted(ctx context.Cont
 		return fmt.Errorf("recording pull request attempt on Finding %s/%s: %w", finding.Namespace, finding.Name, err)
 	}
 	return nil
-}
-
-// pullRequestMax returns the effective cap CheckPullRequestBudget applied - PullRequestBudget may
-// be nil, in which case the conservative built-in default applied (see
-// internal/signal.CheckPullRequestBudget's doc comment). Only used for the Event message above.
-func pullRequestMax(policy *candorv1alpha1.SignalPolicy) int32 {
-	if policy.Spec.PullRequestBudget != nil {
-		return policy.Spec.PullRequestBudget.MaxPullRequests
-	}
-	return signal.DefaultMaxPullRequests
 }
 
 // toHypotheses converts llm.Hypothesis (Confidence as a 0.0-1.0 float64, fine for an in-process

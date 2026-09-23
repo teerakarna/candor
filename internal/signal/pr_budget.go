@@ -19,6 +19,17 @@ import (
 // deliberately conservative starting point; an operator who wants more raises it explicitly.
 const DefaultMaxPullRequests = 1
 
+// MaxPullRequests resolves the effective per-window ceiling for policy: PullRequestBudget's own
+// value if set, otherwise DefaultMaxPullRequests. CheckPullRequestBudget uses it to enforce the
+// limit, and callers that just need to report it (e.g. an Event message) use it too, so the two
+// can never silently disagree about what the ceiling actually is.
+func MaxPullRequests(policy *candorv1alpha1.SignalPolicy) int32 {
+	if b := policy.Spec.PullRequestBudget; b != nil {
+		return b.MaxPullRequests
+	}
+	return DefaultMaxPullRequests
+}
+
 // CheckPullRequestBudget reports whether policy has budget remaining for one more
 // ProposePullRequest action, and if so, records the consumption via a single Status().Update() -
 // the same check-then-write shape as CheckBudget, and the same single-reconciler-concurrency
@@ -29,10 +40,9 @@ func CheckPullRequestBudget(ctx context.Context, c client.Client, policy *candor
 		return false, nil
 	}
 
-	maxPullRequests := int32(DefaultMaxPullRequests)
+	maxPullRequests := MaxPullRequests(policy)
 	windowSeconds := int32(0)
 	if b := policy.Spec.PullRequestBudget; b != nil {
-		maxPullRequests = b.MaxPullRequests
 		windowSeconds = b.WindowSeconds
 	}
 

@@ -93,7 +93,7 @@ func TestComputeFix_SourceObjectMissing_NotOK(t *testing.T) {
 }
 
 func TestComputeFix_UniformFixedVersion_ComputesFix(t *testing.T) {
-	report := vulnReport("ghcr.io/foo/bar", "v1.0.0", "v1.2.0", "v1.2.0")
+	report := vulnReport(testRepository, "v1.0.0", "v1.2.0", "v1.2.0")
 	c := newFakeClient(t, report)
 	finding := testFinding("VulnerabilityReport", testRefName)
 
@@ -104,14 +104,14 @@ func TestComputeFix_UniformFixedVersion_ComputesFix(t *testing.T) {
 	if !ok {
 		t.Fatal("expected ok=true - every vulnerability agrees on fixedVersion v1.2.0")
 	}
-	want := Fix{Repository: "ghcr.io/foo/bar", CurrentTag: "v1.0.0", NewTag: "v1.2.0"}
+	want := Fix{Repository: testRepository, CurrentTag: testCurrentTag, NewTag: testNewTag}
 	if fix != want {
 		t.Errorf("ComputeFix() = %+v, want %+v", fix, want)
 	}
 }
 
 func TestComputeFix_DisagreeingFixedVersions_NotOK(t *testing.T) {
-	report := vulnReport("ghcr.io/foo/bar", "v1.0.0", "v1.2.0", "v1.3.0")
+	report := vulnReport(testRepository, "v1.0.0", "v1.2.0", "v1.3.0")
 	c := newFakeClient(t, report)
 	finding := testFinding("VulnerabilityReport", testRefName)
 
@@ -125,7 +125,7 @@ func TestComputeFix_DisagreeingFixedVersions_NotOK(t *testing.T) {
 }
 
 func TestComputeFix_NoFixedVersionReported_NotOK(t *testing.T) {
-	report := vulnReport("ghcr.io/foo/bar", "v1.0.0", "")
+	report := vulnReport(testRepository, "v1.0.0", "")
 	c := newFakeClient(t, report)
 	finding := testFinding("VulnerabilityReport", testRefName)
 
@@ -139,7 +139,7 @@ func TestComputeFix_NoFixedVersionReported_NotOK(t *testing.T) {
 }
 
 func TestComputeFix_FixedVersionMatchesCurrentTag_NotOK(t *testing.T) {
-	report := vulnReport("ghcr.io/foo/bar", "v1.2.0", "v1.2.0")
+	report := vulnReport(testRepository, "v1.2.0", "v1.2.0")
 	c := newFakeClient(t, report)
 	finding := testFinding("VulnerabilityReport", testRefName)
 

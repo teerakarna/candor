@@ -518,3 +518,54 @@ func TestFindingReconciler_ProposePullRequest_GlobalBudgetBlocksEvenWithNamespac
 		t.Errorf("second namespace's PullRequestsOpened = %d, want 1", gotPolicy2.Status.PullRequestsOpened)
 	}
 }
+
+// TestFindingReconciler_ProposePullRequest_MissingSecret_NeverConsumesBudget is the regression for
+// a misconfigured (here, entirely missing) GitOpsRepo Secret: this fails identically on every
+// retry, so it must never touch either budget - checking the Secret before either one is exactly
+// what stops a typo'd Secret from silently exhausting a namespace's (or the cluster's) entire pull
+// request allowance, as low as 1/24h by default, without a single pull request ever opening.
+func TestFindingReconciler_ProposePullRequest_MissingSecret_NeverConsumesBudget(t *testing.T) {
+	scheme := pullRequestScheme(t)
+	finding := findingRecommending("vr-1", candorv1alpha1.ActionProposePullRequest)
+	policy := gitOpsPolicy(1)
+	globalPolicy := permissiveOperatingPolicy()
+
+	// gitHubTokenSecret() deliberately omitted - the misconfiguration under test.
+	c := fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(finding, policy, vulnReportWithFix(), globalPolicy).
+		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}, &candorv1alpha1.OperatingPolicy{}).Build()
+
+	opener := &fakeOpener{url: testPRURL}
+	r := &FindingReconciler{Client: c, Scheme: scheme, LLM: &countingLLM{resp: llm.Response{}}, GitOps: opener, Recorder: record.NewFakeRecorder(10)}
+
+	ctx := context.Background()
+	req := ctrl.Request{NamespacedName: namespacedName(finding)}
+
+	// Retried 3 times, matching what controller-runtime's own backoff would actually do against a
+	// persistent error - the whole point is that this must not behave differently on retry N than
+	// on retry 1.
+	for i := range 3 {
+		if _, err := r.Reconcile(ctx, req); err == nil {
+			t.Fatalf("reconcile %d: expected an error (Secret missing), got nil", i)
+		}
+	}
+	if got := opener.calls.Load(); got != 0 {
+		t.Fatalf("Opener calls = %d, want 0 - a missing Secret must never reach GitOps.Open", got)
+	}
+
+	gotPolicy := &candorv1alpha1.SignalPolicy{}
+	if err := c.Get(ctx, client.ObjectKey{Namespace: corev1.NamespaceDefault, Name: testPolicyName}, gotPolicy); err != nil {
+		t.Fatal(err)
+	}
+	if gotPolicy.Status.PullRequestsOpened != 0 {
+		t.Errorf("namespace's PullRequestsOpened = %d, want 0 across 3 retries of a persistent Secret error", gotPolicy.Status.PullRequestsOpened)
+	}
+
+	gotGlobal := &candorv1alpha1.OperatingPolicy{}
+	if err := c.Get(ctx, client.ObjectKey{Name: testOperatingPolicyName}, gotGlobal); err != nil {
+		t.Fatal(err)
+	}
+	if gotGlobal.Status.PullRequestsOpened != 0 {
+		t.Errorf("global PullRequestsOpened = %d, want 0 across 3 retries of a persistent Secret error", gotGlobal.Status.PullRequestsOpened)
+	}
+}
