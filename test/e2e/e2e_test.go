@@ -68,6 +68,16 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
+		// Before the manager deploys, not after: internal/provider skips registering a provider's
+		// reconciler at startup if its CRD isn't installed yet, rather than crashing the manager
+		// (see cmd/main.go's provider.CRDInstalled check) - it's a one-time check, not a watch, so
+		// installing this after the manager is already running would never take effect without a
+		// restart.
+		By("installing the pinned Trivy VulnerabilityReport CRD")
+		cmd = exec.Command("kubectl", "apply", "-f", "test/crd/aquasecurity.github.io_vulnerabilityreports.yaml")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to install the VulnerabilityReport CRD")
+
 		By("deploying the controller-manager")
 		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", managerImage))
 		_, err = utils.Run(cmd)
@@ -87,6 +97,10 @@ var _ = Describe("Manager", Ordered, func() {
 
 		By("uninstalling CRDs")
 		cmd = exec.Command("make", "uninstall")
+		_, _ = utils.Run(cmd)
+
+		By("uninstalling the pinned Trivy VulnerabilityReport CRD")
+		cmd = exec.Command("kubectl", "delete", "-f", "test/crd/aquasecurity.github.io_vulnerabilityreports.yaml", "--ignore-not-found")
 		_, _ = utils.Run(cmd)
 
 		By("removing manager namespace")
@@ -270,17 +284,69 @@ var _ = Describe("Manager", Ordered, func() {
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput, err := getMetricsOutput()
-		// Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+		It("should turn a Trivy VulnerabilityReport into a Finding", func() {
+			By("applying a SignalPolicy and a VulnerabilityReport with critical vulnerabilities")
+			manifest := filepath.Join("/tmp", "candor-smoke-test.yaml")
+			Expect(os.WriteFile(manifest, []byte(smokeTestManifest), 0o644)).To(Succeed())
+			cmd := exec.Command("kubectl", "apply", "-n", namespace, "-f", manifest)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to apply the smoke-test SignalPolicy and VulnerabilityReport")
+
+			By("waiting for a Finding to appear with the expected severity")
+			verifyFindingCreated := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "findings", "-n", namespace,
+					"-o", "jsonpath={.items[*].spec.severity}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("CRITICAL"), "expected exactly one CRITICAL Finding")
+			}
+			Eventually(verifyFindingCreated, 2*time.Minute).Should(Succeed())
+
+			By("cleaning up the smoke-test resources")
+			cmd = exec.Command("kubectl", "delete", "-n", namespace, "-f", manifest, "--ignore-not-found")
+			_, _ = utils.Run(cmd)
+		})
 	})
 })
+
+// smokeTestManifest is the minimal real pipeline this project exists to run: a namespace opts in
+// (SignalPolicy), a provider produces evidence (a VulnerabilityReport, schema-validated against
+// the pinned CRD - not a hand-rolled stand-in), and a Finding should come out the other end with
+// no LLM involved. Every other e2e check here proves the manager comes up; this one proves it
+// actually does the one thing the project is for.
+const smokeTestManifest = `
+apiVersion: candor.dev/v1alpha1
+kind: SignalPolicy
+metadata:
+  name: smoke-test
+spec:
+  providers: [trivy]
+---
+apiVersion: aquasecurity.github.io/v1alpha1
+kind: VulnerabilityReport
+metadata:
+  name: smoke-test
+  labels:
+    trivy-operator.resource.kind: Deployment
+    trivy-operator.resource.name: api
+report:
+  updateTimestamp: "2026-09-11T00:00:00Z"
+  artifact:
+    repository: ghcr.io/foo/bar
+    tag: v1.0.0
+  scanner:
+    name: Trivy
+    vendor: Aqua Security
+    version: 0.70.0
+  os: {}
+  summary:
+    criticalCount: 3
+    highCount: 0
+    mediumCount: 0
+    lowCount: 0
+    unknownCount: 0
+  vulnerabilities: []
+`
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.
 // It uses the Kubernetes TokenRequest API to generate a token by directly sending a request

@@ -1,0 +1,59 @@
+name: Render diagrams
+
+# Renders every Mermaid source under docs-site/docs/assets/*.mmd and fails if the checked-in SVG
+# doesn't match - catches a diagram edited without re-running mermaid-cli locally. Deliberately
+# does NOT auto-commit the render back to the branch: this repo requires signed commits on main,
+# and a bot committing via plain `git commit`/`git push` produces an unsigned commit that silently
+# blocks merging under branch protection regardless of how green every other check is - hit for
+# real on this workflow's first PR. Auto-committing a verified/signed commit from CI is possible
+# (GitHub's createCommitOnBranch GraphQL mutation signs commits made via the API), but isn't worth
+# the added complexity here; failing with clear instructions is simpler and just as effective.
+
+on:
+  pull_request:
+    paths:
+      - "docs-site/docs/assets/*.mmd"
+      - "docs-site/docs/assets/*.svg"
+      - ".github/workflows/render-diagrams.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+
+      - name: Install mermaid-cli
+        run: npm install -g @mermaid-js/mermaid-cli
+
+      - name: Render diagrams and check for drift
+        # mermaid-cli ships puppeteer-core (no bundled browser); point it at the Chrome
+        # pre-installed on the runner instead of downloading one.
+        run: |
+          set -euo pipefail
+          PUPPETEER_EXECUTABLE_PATH="$(command -v google-chrome-stable || command -v google-chrome || command -v chromium-browser || command -v chromium)"
+          export PUPPETEER_EXECUTABLE_PATH
+          echo "Using browser: $PUPPETEER_EXECUTABLE_PATH"
+          for src in docs-site/docs/assets/*.mmd; do
+            out="${src%.mmd}.svg"
+            mmdc -i "$src" -o "$out" -w 2400 -b white
+          done
+
+          if ! git diff --quiet -- docs-site/docs/assets/*.svg; then
+            echo "::error::One or more rendered diagrams are out of date. Run this locally and commit the result:"
+            echo "::error::  npx -y @mermaid-js/mermaid-cli -i <file>.mmd -o <file>.svg -w 2400 -b white"
+            git diff --stat -- docs-site/docs/assets/*.svg
+            exit 1
+          fi
+          echo "Rendered diagrams are up to date."

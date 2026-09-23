@@ -6,93 +6,75 @@ A Kubernetes operator that ingests signals from security/observability tools (Tr
 later), uses an LLM to enrich them into ranked hypotheses, and proposes remediation as GitOps pull
 requests — with bounded LLM spend and a published record of its own accuracy.
 
-## Why
+📖 **[Full docs, architecture, and the case for Candor →](https://teerakarna.github.io/candor/)**
 
-Existing LLM-assisted Kubernetes ops tools (k8sgpt, Kubernaut, HolmesGPT) treat model invocation as
-stateless, unbounded, and unaccountable — which is exactly what shows up in their own issue
-trackers as runaway API spend, unshippable suppression, and no way to check whether a fix actually
-worked. Candor does the same underlying job — signal in, LLM enrichment, human-reviewable action
-out — engineered against those specific, evidenced failures:
+**Status**: early build, shipped in slices — see [`docs/design.md`](docs/design.md) for exactly
+what's done.
 
-- **Bounded cost**: an LLM call happens once per distinct cluster-state fingerprint, ever, not once
-  per reconcile. A hard budget ceiling degrades to deterministic-only analysis rather than silently
-  spending money.
-- **GitOps-native**: the default write path is a pull request, not a cluster mutation — so it
-  doesn't fight Flux/Argo for control of the cluster.
-- **Self-measuring**: every finding is re-checked and its outcome (resolved/still-present/recurred)
-  is published as metrics — an answer to the "AIOps: Prove It!" critique that most of this category
-  hasn't answered.
+## Features
 
-Full rationale, competitive analysis, and evidence base: [`docs/design.md`](docs/design.md).
+**What sets Candor apart:**
 
-**Status**: early build, in slices — see the design doc's delivery-slices list for what's done.
+- **Bounded LLM cost, by construction** — an LLM call happens once per distinct cluster-state
+  fingerprint, ever, not once per reconcile. A hard budget ceiling degrades to deterministic-only
+  findings on exhaustion rather than silently spending past it.
+- **GitOps-native remediation** — the default write path is a pull request against your GitOps
+  repo, never a direct cluster mutation.
+- **Published accuracy** — every finding is re-checked automatically, and its outcome (resolved,
+  still present, recurred) is a queryable Prometheus metric, not a claim in a README.
+- **Suppression that resurfaces on its own** — mute a fingerprint with a required reason and
+  optional expiry; if the underlying content actually changes, it stops matching and comes back
+  automatically. Nothing to remember to clean up.
+- **Untrusted-input safe** — all ingested telemetry is treated as data, never instructions. Model
+  output is grammar-constrained to a fixed action catalog; it can't emit a free-form action.
+- **Every write path has a brake, not just the LLM** - a pull request only opens once the fix is
+  independently, mechanically verified, and even then it's bounded by a per-namespace cap, a
+  cluster-wide cap, and a panic switch that pauses it everywhere with no redeploy.
 
-## Getting Started
+**What you'd expect from a tool in this space, done properly:**
 
-### Prerequisites
-- go version v1.24.6+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
+- Provider-based signal ingestion (Trivy today; the interface is provider-agnostic)
+- Fully Kubernetes-native — `kubectl get findings`, no separate UI or database to run
+- Prometheus metrics and a ready-made Grafana dashboard, shipped in the Helm chart
+- A generic webhook sink and periodic digest — one JSON payload shape, works with Slack, Teams,
+  PagerDuty, or anything that can receive a POST
+- Every release is signed, with a CycloneDX SBOM and build provenance attached
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
-
-```sh
-make docker-build docker-push IMG=<some-registry>/candor:tag
-```
-
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
-
-**Install the CRDs into the cluster:**
+## Quickstart
 
 ```sh
-make install
+helm install candor oci://ghcr.io/teerakarna/charts/candor --version <version> \
+  --namespace candor-system --create-namespace
 ```
 
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
+Opt a namespace in:
 
 ```sh
-make deploy IMG=<some-registry>/candor:tag
+kubectl apply -n <your-namespace> -f - <<EOF
+apiVersion: candor.dev/v1alpha1
+kind: SignalPolicy
+metadata:
+  name: default
+spec:
+  providers: [trivy]
+  minSeverity: HIGH
+EOF
 ```
 
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
-
-**Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
+If [Trivy Operator](https://github.com/aquasecurity/trivy-operator) is already scanning that
+namespace, you'll see results as soon as it produces a `VulnerabilityReport`:
 
 ```sh
-kubectl apply -k config/samples/
+kubectl get findings -n <your-namespace>
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
-
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
-
-```sh
-kubectl delete -k config/samples/
-```
-
-**Delete the APIs(CRDs) from the cluster:**
-
-```sh
-make uninstall
-```
-
-**UnDeploy the controller from the cluster:**
-
-```sh
-make undeploy
-```
+That's it — deterministic findings work with zero further configuration. See
+[Configuration](#configuration) below to enable LLM enrichment, a budget ceiling, suppression,
+notifications, and GitOps pull request remediation.
 
 ## Configuration
 
-Deterministic findings (Trivy → `Finding`) work out of the box with no configuration. LLM
-enrichment (ranked hypotheses on each `Finding`) is opt-in - without an API key it's simply not
+LLM enrichment (ranked hypotheses on each `Finding`) is opt-in - without an API key it's simply not
 active, not degraded:
 
 ```sh
@@ -106,6 +88,23 @@ so enrichment output is grammar-constrained to the hypotheses schema - see
 matters given the input is untrusted scanner data. Override the model with
 `CANDOR_LLM_MODEL` (default: `claude-sonnet-5`) via `manager.envOverrides` in the Helm chart's
 values.
+
+### Bounding the cost
+
+```yaml
+apiVersion: candor.dev/v1alpha1
+kind: SignalPolicy
+metadata:
+  name: default
+spec:
+  providers: [trivy]
+  minSeverity: HIGH
+  budget:
+    maxCalls: 50
+    windowSeconds: 86400
+```
+
+On exhaustion, enrichment degrades to deterministic-only findings for the rest of the window.
 
 ### Suppressing a Finding
 
@@ -150,6 +149,100 @@ spec:
 It's a plain JSON POST with no vendor-specific formatting - point it at whatever turns JSON into a
 Slack/Teams/PagerDuty message (a relay, a low-code webhook, etc.).
 
+### Proposing GitOps pull requests
+
+Candor's default write path is a pull request against your GitOps repo, never a direct cluster
+mutation. It only fires when a fix is independently, mechanically verifiable - today that means a
+Trivy `VulnerabilityReport` where every vulnerability agrees on one `fixedVersion` - regardless of
+what the LLM recommends. No such fix, no PR.
+
+The controller deliberately has no cluster-wide access to Secrets, so enabling this needs two
+things in the namespace: the GitHub token, and a Role granting the controller's ServiceAccount
+`get` on that one Secret specifically.
+
+```sh
+kubectl create secret generic github-token --namespace <your-namespace> \
+  --from-literal=token=<a GitHub token with contents + pull-request write access>
+
+kubectl apply -n <your-namespace> -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: candor-read-github-token
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["github-token"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: candor-read-github-token
+subjects:
+  - kind: ServiceAccount
+    name: candor-controller-manager    # matches your Helm release name + "-controller-manager"
+    namespace: candor-system
+roleRef:
+  kind: Role
+  name: candor-read-github-token
+  apiGroup: rbac.authorization.k8s.io
+EOF
+```
+
+Then point a `SignalPolicy` at the repo to patch:
+
+```yaml
+apiVersion: candor.dev/v1alpha1
+kind: SignalPolicy
+metadata:
+  name: default
+spec:
+  providers: [trivy]
+  gitOpsRepo:
+    owner: your-org
+    repo: gitops-demo
+    baseBranch: main               # optional, defaults to main
+    path: apps/api/values.yaml
+    yamlPath: image.tag
+    secretRef:
+      name: github-token
+  pullRequestBudget:                # optional - omitting it still applies a conservative
+    maxPullRequests: 5              # built-in default (1/24h), never "unlimited"
+    windowSeconds: 86400
+```
+
+The opened PR carries the finding, its ranked hypotheses, and confidence in the description - no
+new surface to learn beyond reading a normal PR.
+
+### The cluster-wide panic switch and rate limit
+
+`SignalPolicy.spec.pullRequestBudget` bounds one namespace. `OperatingPolicy` - Candor's one
+cluster-scoped resource - bounds the whole cluster, independently and in addition: a namespace
+comfortably under its own budget can still be refused once the cluster-wide ceiling is spent by
+everyone else combined.
+
+It's also the panic switch. Flip `mode` to `Audit` to stop every `ProposePullRequest` action across
+every namespace immediately, with no redeploy - checked before any budget is even touched, so it's
+a genuine full stop, not "still counted but not executed."
+
+```yaml
+apiVersion: candor.dev/v1alpha1
+kind: OperatingPolicy
+metadata:
+  name: default   # exactly one is meaningful cluster-wide; a second is flagged, not merged
+spec:
+  pullRequestRateLimit:
+    maxPullRequests: 5
+    windowSeconds: 86400
+  mode: Active   # set to "Audit" to pause ProposePullRequest cluster-wide
+```
+
+Unlike every other budget in Candor, no `OperatingPolicy` existing at all means `ProposePullRequest`
+is off cluster-wide, not "unlimited" - there's nowhere to persist a count, so allowing anyway would
+just be an uncounted, unenforced brake. Create even an empty one to turn the action path on at the
+conservative built-in default.
+
 ### Grafana dashboard
 
 Ship a pre-built dashboard (LLM calls, enrichment skipped by reason, verification transitions,
@@ -161,23 +254,7 @@ helm upgrade --install candor oci://ghcr.io/teerakarna/charts/candor \
   --set prometheus.enabled=true --set grafanaDashboard.enabled=true
 ```
 
-## Project Distribution
-
-Two install paths, both produced by the release pipeline — nothing hand-built or committed to
-`main`, so what you install is always a specific, versioned, signed release.
-
-### Helm chart (recommended)
-
-```sh
-helm install candor oci://ghcr.io/teerakarna/charts/candor --version <version> \
-  --namespace candor-system --create-namespace
-```
-
-Chart source lives under `charts/chart/` (generated via `kubebuilder edit
---plugins=helm/v2-alpha --output-dir=charts`, regenerate the same way after changing the API or
-RBAC). Published to the OCI registry on every tagged release, alongside the signed image.
-
-### YAML bundle
+## Installing without Helm
 
 Each [release](https://github.com/teerakarna/candor/releases) attaches a versioned `install.yaml`
 (all resources, generated fresh at release time — not a stale copy on `main`):
@@ -186,7 +263,54 @@ Each [release](https://github.com/teerakarna/candor/releases) attaches a version
 kubectl apply -f https://github.com/teerakarna/candor/releases/download/<tag>/install.yaml
 ```
 
-To build it yourself: `make build-installer IMG=ghcr.io/teerakarna/candor:<tag>`.
+Both install paths are produced by the same release pipeline — nothing hand-built or committed to
+`main`, so what you install is always a specific, versioned, signed release.
+
+## Building from source (contributors)
+
+### Prerequisites
+
+- go version v1.24.6+
+- docker version 17.03+
+- kubectl version v1.11.3+
+- Access to a Kubernetes v1.11.3+ cluster
+
+### Quick local loop (Kind)
+
+```sh
+make dev-up      # creates (or reuses) a Kind cluster, builds the image, deploys Candor
+make dev-status  # kubectl get pods -n candor-system
+make dev-down    # tear the cluster down
+```
+
+`make dev-up` is safe to re-run after a code change - it rebuilds the image and redeploys onto the
+same cluster. It also installs the pinned Trivy `VulnerabilityReport` CRD
+(`test/crd/`), so you can hand-apply a `SignalPolicy` and a fake `VulnerabilityReport` and watch a
+`Finding` come out the other end without a real Trivy Operator running. This is a separate,
+persistent cluster from the one `make test-e2e` creates and destroys automatically around itself.
+
+### Build, deploy, and run against a specific cluster or registry
+
+```sh
+make docker-build docker-push IMG=<some-registry>/candor:tag
+make install                          # CRDs
+make deploy IMG=<some-registry>/candor:tag
+kubectl apply -k config/samples/      # sample SignalPolicy
+```
+
+> If you hit RBAC errors, make sure you're logged in with sufficient cluster privileges.
+
+To tear back down:
+
+```sh
+kubectl delete -k config/samples/
+make undeploy
+make uninstall
+```
+
+The Helm chart source lives under `charts/chart/` (generated via `kubebuilder edit
+--plugins=helm/v2-alpha --output-dir=charts`, regenerate the same way after changing the API or
+RBAC). Published to the OCI registry on every tagged release, alongside the signed image.
 
 ## Contributing
 
@@ -212,4 +336,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-

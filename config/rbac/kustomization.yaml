@@ -22,6 +22,9 @@ resources:
 # default, aiding admins in cluster management. Those roles are
 # not used by the candor itself. You can comment the following lines
 # if you do not want those helpers be installed with your Project.
+- operatingpolicy_admin_role.yaml
+- operatingpolicy_editor_role.yaml
+- operatingpolicy_viewer_role.yaml
 - suppression_admin_role.yaml
 - suppression_editor_role.yaml
 - suppression_viewer_role.yaml
