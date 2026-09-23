@@ -26,6 +26,16 @@ type Hypothesis struct {
 	Cause      string
 	Confidence float64 // 0.0-1.0
 	Rationale  string
+
+	// RecommendedAction is the model's suggestion for which action from Candor's fixed catalog
+	// (candorv1alpha1.ActionNotify / ActionProposePullRequest) this hypothesis warrants. Advisory
+	// only - see candorv1alpha1.Hypothesis.RecommendedAction's doc comment for why this can never
+	// itself authorize a write. This package intentionally doesn't import api/v1alpha1 to name the
+	// two values directly (llm stays decoupled from the CRD types, matching how Confidence's own
+	// 0.0-1.0-vs-0-100 conversion already crosses that boundary in
+	// internal/controller.FindingReconciler); an empty or unrecognised string is always valid input
+	// here; the CRD boundary is where it gets validated.
+	RecommendedAction string
 }
 
 // Response is one enrichment result.

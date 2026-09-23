@@ -3,4 +3,5 @@ resources:
 - candor_v1alpha1_signalpolicy.yaml
 - candor_v1alpha1_finding.yaml
 - candor_v1alpha1_suppression.yaml
+- candor_v1alpha1_operatingpolicy.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
