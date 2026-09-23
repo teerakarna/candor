@@ -275,7 +275,21 @@ Both install paths are produced by the same release pipeline — nothing hand-bu
 - kubectl version v1.11.3+
 - Access to a Kubernetes v1.11.3+ cluster
 
-### Build, deploy, and run against a dev cluster
+### Quick local loop (Kind)
+
+```sh
+make dev-up      # creates (or reuses) a Kind cluster, builds the image, deploys Candor
+make dev-status  # kubectl get pods -n candor-system
+make dev-down    # tear the cluster down
+```
+
+`make dev-up` is safe to re-run after a code change - it rebuilds the image and redeploys onto the
+same cluster. It also installs the pinned Trivy `VulnerabilityReport` CRD
+(`test/crd/`), so you can hand-apply a `SignalPolicy` and a fake `VulnerabilityReport` and watch a
+`Finding` come out the other end without a real Trivy Operator running. This is a separate,
+persistent cluster from the one `make test-e2e` creates and destroys automatically around itself.
+
+### Build, deploy, and run against a specific cluster or registry
 
 ```sh
 make docker-build docker-push IMG=<some-registry>/candor:tag

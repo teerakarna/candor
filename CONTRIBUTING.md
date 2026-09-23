@@ -10,6 +10,11 @@ fingerprinting/budget model are still settling.
 - [kubebuilder](https://book.kubebuilder.io/) 4.x.
 - `make test` (runs `envtest` against a real control plane — not mocked) and `make lint` before
   opening a PR.
+- `make dev-up` for a real cluster to poke at by hand - creates (or reuses) a persistent local
+  Kind cluster, builds the image, and deploys Candor onto it. Safe to re-run after a code change
+  (rebuilds and redeploys). `make dev-status` / `make dev-down` alongside it. Separate from the
+  Kind cluster `make test-e2e` creates and destroys automatically around itself - this one stays
+  up between runs.
 - `make manifests generate` after editing any `_types.go` file, and commit the regenerated output.
 - After a CRD or RBAC change, regenerate the Helm chart:
   `kubebuilder edit --plugins=helm/v2-alpha --output-dir=charts --force`. This **will** revert
