@@ -94,6 +94,47 @@ test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expect
 cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
 	@$(KIND) delete cluster --name $(KIND_CLUSTER)
 
+# A separate, persistent cluster from KIND_CLUSTER above - that one is created and torn down
+# automatically inside test-e2e. This one stays up between runs so you can kubectl into it,
+# apply a sample, and watch it work, the same environment README's own dev-cluster instructions
+# assume but without hand-running each step yourself.
+DEV_KIND_CLUSTER ?= candor-dev
+DEV_IMG ?= candor-dev:latest
+
+.PHONY: dev-up
+dev-up: manifests generate ## Stand up (or reuse) a persistent local Kind cluster with Candor built and deployed. Safe to re-run after code changes to rebuild and redeploy.
+	@command -v $(KIND) >/dev/null 2>&1 || { \
+		echo "Kind is not installed. Please install Kind manually."; \
+		exit 1; \
+	}
+	@case "$$($(KIND) get clusters)" in \
+		*"$(DEV_KIND_CLUSTER)"*) \
+			echo "Kind cluster '$(DEV_KIND_CLUSTER)' already exists. Reusing it." ;; \
+		*) \
+			echo "Creating Kind cluster '$(DEV_KIND_CLUSTER)'..."; \
+			$(KIND) create cluster --name $(DEV_KIND_CLUSTER) ;; \
+	esac
+	"$(KUBECTL)" config use-context kind-$(DEV_KIND_CLUSTER)
+	$(MAKE) install
+	"$(KUBECTL)" apply -f test/crd/aquasecurity.github.io_vulnerabilityreports.yaml
+	$(MAKE) docker-build IMG=$(DEV_IMG)
+	$(KIND) load docker-image $(DEV_IMG) --name $(DEV_KIND_CLUSTER)
+	$(MAKE) deploy IMG=$(DEV_IMG)
+	@echo ""
+	@echo "Candor is deployed to Kind cluster '$(DEV_KIND_CLUSTER)' (context kind-$(DEV_KIND_CLUSTER))."
+	@echo "  kubectl get pods -n candor-system"
+	@echo "  kubectl apply -n default -f config/samples/candor_v1alpha1_signalpolicy.yaml"
+	@echo "Re-run 'make dev-up' after code changes to rebuild the image and redeploy."
+	@echo "Tear down with 'make dev-down'."
+
+.PHONY: dev-status
+dev-status: ## Show Candor's pods on the local dev cluster
+	"$(KUBECTL)" --context kind-$(DEV_KIND_CLUSTER) get pods -n candor-system
+
+.PHONY: dev-down
+dev-down: ## Tear down the local dev cluster created by dev-up
+	@$(KIND) delete cluster --name $(DEV_KIND_CLUSTER)
+
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
 	"$(GOLANGCI_LINT)" run

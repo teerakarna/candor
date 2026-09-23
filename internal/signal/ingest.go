@@ -121,7 +121,7 @@ func Ingest(ctx context.Context, c client.Client, scheme *runtime.Scheme, sig Si
 	}
 	if outcomeChanged {
 		finding.Status.VerificationOutcome = newOutcome
-		metrics.VerificationTransitionsTotal.WithLabelValues(verificationMetricLabel[newOutcome]).Inc()
+		metrics.VerificationTransitionsTotal.WithLabelValues(verificationMetricLabel[newOutcome], sig.Severity).Inc()
 	}
 	if fingerprintChanged || outcomeChanged {
 		if err := c.Status().Update(ctx, finding); err != nil {
@@ -234,11 +234,16 @@ func resolveIfOpen(ctx context.Context, c client.Client, namespace, name string)
 		return nil, nil
 	}
 
+	// finding.Spec.Severity is still the last real severity before this resolution -
+	// resolveIfOpen only ever touches Status, so this reports what was resolved, not the
+	// filtered-out signal that triggered the resolution (which may have no severity at all, e.g.
+	// a Trivy report that dropped to zero vulnerabilities).
+	severity := finding.Spec.Severity
 	finding.Status.VerificationOutcome = VerificationResolved
 	if err := c.Status().Update(ctx, finding); err != nil {
 		return nil, fmt.Errorf("resolving Finding %s/%s: %w", namespace, name, err)
 	}
-	metrics.VerificationTransitionsTotal.WithLabelValues(verificationMetricLabel[VerificationResolved]).Inc()
+	metrics.VerificationTransitionsTotal.WithLabelValues(verificationMetricLabel[VerificationResolved], severity).Inc()
 	return finding, nil
 }
 
