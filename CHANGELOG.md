@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-24
+
+First tagged release. Slices 1-9 of the delivery plan in `docs/design.md`: signal ingestion,
+bounded LLM enrichment, suppression, the verification loop, notifications, and the GitOps pull
+request action with all of its brakes. Deliberately `v0.1.0`, not `v1.0.0` - the CRD shapes are
+still `v1alpha1` and may change, and nothing here has yet been run against a production cluster.
+
 ### Added
 
 - Project scaffolding (kubebuilder), CI, OSS boilerplate, release automation, repo governance.

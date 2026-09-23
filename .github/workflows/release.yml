@@ -24,9 +24,6 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Build install.yaml for this release
-        run: make build-installer IMG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
-
       - name: goreleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
@@ -34,7 +31,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # dist/ is wiped by goreleaser --clean, so install.yaml is attached after goreleaser runs.
+      # Both of these have to happen after goreleaser, not before, and it took a local dry run of
+      # the real thing to find out: `make build-installer` runs `kustomize edit set image`, which
+      # edits config/manager/kustomization.yaml in the working tree, and goreleaser refuses to
+      # release from a dirty tree ("git is in a dirty state"). Generating it first would also be
+      # pointless anyway - `--clean` wipes dist/ before building, taking install.yaml with it.
+      - name: Build install.yaml for this release
+        run: make build-installer IMG=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+
       - name: Attach install.yaml to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
