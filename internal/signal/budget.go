@@ -15,6 +15,14 @@ import (
 // defaultBudgetWindow matches SignalPolicySpec.Budget.WindowSeconds's +kubebuilder:default.
 const defaultBudgetWindow = 24 * time.Hour
 
+// Condition reasons shared by every rolling-window budget check in this package (CheckBudget,
+// CheckPullRequestBudget, CheckGlobalPullRequestBudget) - one pair of constants instead of the
+// same two literals repeated at each call site.
+const (
+	reasonWithinBudget = "WithinBudget"
+	reasonLimitReached = "LimitReached"
+)
+
 // FindPolicy returns the first SignalPolicy in namespace that enables provider, or nil if none.
 // This is the same lookup Ingest uses to decide whether to accept a signal at all - here it finds
 // the policy whose Budget (if any) governs enrichment for signals it already accepted.
@@ -66,11 +74,11 @@ func CheckBudget(ctx context.Context, c client.Client, policy *candorv1alpha1.Si
 	if allowed {
 		policy.Status.BudgetCallsUsed++
 		condition.Status = metav1.ConditionFalse
-		condition.Reason = "WithinBudget"
+		condition.Reason = reasonWithinBudget
 		condition.Message = fmt.Sprintf("%d/%d calls used this window", policy.Status.BudgetCallsUsed, b.MaxCalls)
 	} else {
 		condition.Status = metav1.ConditionTrue
-		condition.Reason = "LimitReached"
+		condition.Reason = reasonLimitReached
 		condition.Message = fmt.Sprintf("%d/%d calls used - enrichment degraded to deterministic-only until the window resets", policy.Status.BudgetCallsUsed, b.MaxCalls)
 	}
 	meta.SetStatusCondition(&policy.Status.Conditions, condition)

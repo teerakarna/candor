@@ -10,6 +10,11 @@ fingerprinting/budget model are still settling.
 - [kubebuilder](https://book.kubebuilder.io/) 4.x.
 - `make test` (runs `envtest` against a real control plane — not mocked) and `make lint` before
   opening a PR.
+- `make dev-up` for a real cluster to poke at by hand - creates (or reuses) a persistent local
+  Kind cluster, builds the image, and deploys Candor onto it. Safe to re-run after a code change
+  (rebuilds and redeploys). `make dev-status` / `make dev-down` alongside it. Separate from the
+  Kind cluster `make test-e2e` creates and destroys automatically around itself - this one stays
+  up between runs.
 - `make manifests generate` after editing any `_types.go` file, and commit the regenerated output.
 - After a CRD or RBAC change, regenerate the Helm chart:
   `kubebuilder edit --plugins=helm/v2-alpha --output-dir=charts --force`. This **will** revert
@@ -35,11 +40,21 @@ change that touches these:
   A change that calls the model directly, bypassing fingerprinting, will be rejected regardless of
   how useful it seems locally.
 - **Read-only cluster access by default.** The operator's ServiceAccount must not gain write RBAC
-  outside the documented, gated Enforcing-mode path.
+  outside the documented, gated Enforcing-mode path. `ProposePullRequest` (slice 9) doesn't violate
+  this - its write lands in an external GitOps repo, never a cluster mutation.
 - **No free-form model-selected actions.** Model output selects from the fixed action catalog; it
   never emits an action string that gets executed directly.
 - **Every finding is falsifiable.** A new finding type needs a defined verification check — "how do
   we know this cleared" — before it ships.
+- **No cluster-wide access to Secrets.** A namespace that needs the controller to read one (e.g.
+  `SignalPolicy.spec.gitOpsRepo.secretRef`) grants a namespaced Role naming that Secret explicitly,
+  never adding `secrets` to the operator's ClusterRole. Trivy's config scan (KSV-0041) caught this
+  once already; it's a required CI check, not just a style preference.
+- **A brake ships in the same PR as the accelerator it bounds, never after.** Any mechanism that
+  writes, spends, or acts needs its limit - a cap, a kill switch, a test proving it holds under
+  volume - defined and enforced in the same change (docs/design.md, "Every accelerator ships with
+  its brake"). Slice 9 is the precedent: `ProposePullRequest`, its per-namespace and cluster-wide
+  caps, its panic switch, and the volume test proving all three hold landed in one PR.
 
 ## Recording findings
 

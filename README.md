@@ -27,6 +27,9 @@ what's done.
   automatically. Nothing to remember to clean up.
 - **Untrusted-input safe** — all ingested telemetry is treated as data, never instructions. Model
   output is grammar-constrained to a fixed action catalog; it can't emit a free-form action.
+- **Every write path has a brake, not just the LLM** - a pull request only opens once the fix is
+  independently, mechanically verified, and even then it's bounded by a per-namespace cap, a
+  cluster-wide cap, and a panic switch that pauses it everywhere with no redeploy.
 
 **What you'd expect from a tool in this space, done properly:**
 
@@ -67,7 +70,7 @@ kubectl get findings -n <your-namespace>
 
 That's it — deterministic findings work with zero further configuration. See
 [Configuration](#configuration) below to enable LLM enrichment, a budget ceiling, suppression,
-and notifications.
+notifications, and GitOps pull request remediation.
 
 ## Configuration
 
@@ -146,6 +149,100 @@ spec:
 It's a plain JSON POST with no vendor-specific formatting - point it at whatever turns JSON into a
 Slack/Teams/PagerDuty message (a relay, a low-code webhook, etc.).
 
+### Proposing GitOps pull requests
+
+Candor's default write path is a pull request against your GitOps repo, never a direct cluster
+mutation. It only fires when a fix is independently, mechanically verifiable - today that means a
+Trivy `VulnerabilityReport` where every vulnerability agrees on one `fixedVersion` - regardless of
+what the LLM recommends. No such fix, no PR.
+
+The controller deliberately has no cluster-wide access to Secrets, so enabling this needs two
+things in the namespace: the GitHub token, and a Role granting the controller's ServiceAccount
+`get` on that one Secret specifically.
+
+```sh
+kubectl create secret generic github-token --namespace <your-namespace> \
+  --from-literal=token=<a GitHub token with contents + pull-request write access>
+
+kubectl apply -n <your-namespace> -f - <<EOF
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: candor-read-github-token
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["github-token"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: candor-read-github-token
+subjects:
+  - kind: ServiceAccount
+    name: candor-controller-manager    # matches your Helm release name + "-controller-manager"
+    namespace: candor-system
+roleRef:
+  kind: Role
+  name: candor-read-github-token
+  apiGroup: rbac.authorization.k8s.io
+EOF
+```
+
+Then point a `SignalPolicy` at the repo to patch:
+
+```yaml
+apiVersion: candor.dev/v1alpha1
+kind: SignalPolicy
+metadata:
+  name: default
+spec:
+  providers: [trivy]
+  gitOpsRepo:
+    owner: your-org
+    repo: gitops-demo
+    baseBranch: main               # optional, defaults to main
+    path: apps/api/values.yaml
+    yamlPath: image.tag
+    secretRef:
+      name: github-token
+  pullRequestBudget:                # optional - omitting it still applies a conservative
+    maxPullRequests: 5              # built-in default (1/24h), never "unlimited"
+    windowSeconds: 86400
+```
+
+The opened PR carries the finding, its ranked hypotheses, and confidence in the description - no
+new surface to learn beyond reading a normal PR.
+
+### The cluster-wide panic switch and rate limit
+
+`SignalPolicy.spec.pullRequestBudget` bounds one namespace. `OperatingPolicy` - Candor's one
+cluster-scoped resource - bounds the whole cluster, independently and in addition: a namespace
+comfortably under its own budget can still be refused once the cluster-wide ceiling is spent by
+everyone else combined.
+
+It's also the panic switch. Flip `mode` to `Audit` to stop every `ProposePullRequest` action across
+every namespace immediately, with no redeploy - checked before any budget is even touched, so it's
+a genuine full stop, not "still counted but not executed."
+
+```yaml
+apiVersion: candor.dev/v1alpha1
+kind: OperatingPolicy
+metadata:
+  name: default   # exactly one is meaningful cluster-wide; a second is flagged, not merged
+spec:
+  pullRequestRateLimit:
+    maxPullRequests: 5
+    windowSeconds: 86400
+  mode: Active   # set to "Audit" to pause ProposePullRequest cluster-wide
+```
+
+Unlike every other budget in Candor, no `OperatingPolicy` existing at all means `ProposePullRequest`
+is off cluster-wide, not "unlimited" - there's nowhere to persist a count, so allowing anyway would
+just be an uncounted, unenforced brake. Create even an empty one to turn the action path on at the
+conservative built-in default.
+
 ### Grafana dashboard
 
 Ship a pre-built dashboard (LLM calls, enrichment skipped by reason, verification transitions,
@@ -178,7 +275,21 @@ Both install paths are produced by the same release pipeline — nothing hand-bu
 - kubectl version v1.11.3+
 - Access to a Kubernetes v1.11.3+ cluster
 
-### Build, deploy, and run against a dev cluster
+### Quick local loop (Kind)
+
+```sh
+make dev-up      # creates (or reuses) a Kind cluster, builds the image, deploys Candor
+make dev-status  # kubectl get pods -n candor-system
+make dev-down    # tear the cluster down
+```
+
+`make dev-up` is safe to re-run after a code change - it rebuilds the image and redeploys onto the
+same cluster. It also installs the pinned Trivy `VulnerabilityReport` CRD
+(`test/crd/`), so you can hand-apply a `SignalPolicy` and a fake `VulnerabilityReport` and watch a
+`Finding` come out the other end without a real Trivy Operator running. This is a separate,
+persistent cluster from the one `make test-e2e` creates and destroys automatically around itself.
+
+### Build, deploy, and run against a specific cluster or registry
 
 ```sh
 make docker-build docker-push IMG=<some-registry>/candor:tag
