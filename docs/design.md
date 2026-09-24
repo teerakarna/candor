@@ -363,7 +363,11 @@ budget explicitly, or it is not a solution.
 12. Fixture suite + published per-model accuracy. The evidence gap #7's answer already promises
     ("per-model accuracy is measured and published against a fixture suite, not asserted") and
     that Candor doesn't yet have. Required before any claim about a smaller or fine-tuned model's
-    accuracy - see the deferred item below, which depends on this slice existing first.
+    accuracy - see the deferred item below, which depends on this slice existing first. Once the
+    Ollama backend (slice 10) exists, scope this to include candidate open models specifically, not
+    only Anthropic model choices - "which open model, if any, is good enough" becomes an answerable
+    question at that point, and should be answered by this suite, not by reputation or a vendor
+    benchmark.
 13. Blog article.
 
 Quarantine/Enforcing mode is explicitly post-v1, gated on slice 7.
@@ -380,10 +384,23 @@ well - much narrower than general chat - so this isn't dismissed as infeasible. 
 before slice 12's fixture suite exists to measure it against would be exactly the kind of
 unverified claim this project's whole thesis argues against: the right sequence is (a) Ollama
 support (slice 10), (b) measure a good off-the-shelf open model against the hosted default on the
-fixture suite, (c) only fine-tune if that measurement shows a real, published gap. Grammar-
-constrained output also isn't automatic outside Anthropic's structured-outputs API for a
-locally-served model - Ollama's JSON-schema mode or an outer parse-validate-reject loop would be
-needed, which is solvable but real wiring, not a config flag.
+fixture suite, (c) only fine-tune if that measurement shows a real, published gap.
+
+Grammar-constrained output for a locally-served model is real but conditional, verified 2026-09-24
+against Ollama v0.34.3 (`llama3.2:3b`) before slice 10 implementation started, see issue #52's
+comments for the raw evidence: passing a full JSON schema via the `format` field genuinely
+constrains decoding - an enum held even under a direct prompt-injection attempt asking for an
+out-of-catalog action. `format: "json"` alone does **not** - same injection prompt produced the
+out-of-catalog value verbatim, since that mode only guarantees valid JSON, not schema conformance.
+Only the full-schema form is a real constraint; `internal/llm/ollama` must never use the bare
+`"json"` mode for anything that reaches the action catalog. The independent validation in slice
+10's brake issue (#53) stays necessary regardless - this was one model, one test, defense in depth,
+not proof it holds for every model.
+
+Model provenance is a separate, real safety question for any locally-served model: recommend only
+Ollama-registry models in GGUF format (flat tensor data), never an arbitrary third-party
+`.bin`/`.pt` file - the older pickle-based PyTorch checkpoint format has real, documented
+code-execution vulnerabilities via deserialization that GGUF does not share.
 
 ## Verification plan
 
