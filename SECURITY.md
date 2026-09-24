@@ -20,8 +20,11 @@ LLM prompts. The main areas of security interest are:
   rather than only its narrative content. Enrichment output (`internal/llm`) is grammar-constrained
   to a fixed hypotheses schema via the Anthropic API's structured outputs (see
   `internal/llm/anthropic`'s package doc) — there is no free-form output path for injected content
-  to escape through. Once action-taking exists (a later slice), the same constraint applies: model
-  output must only ever select from the fixed action catalog, never emit or influence one.
+  to escape through. Action-taking (`ProposePullRequest`, shipped in `v0.1.0`) keeps the same
+  constraint: the model's recommended action is read from the fixed catalog on `Hypothesis`, never
+  executed directly, and a pull request only opens once the fix is independently, mechanically
+  re-derived from the scan data (`internal/gitops.ComputeFix`) — the model's own output never
+  authorizes a write on its own.
 - **RBAC scope creep**: the operator's ServiceAccount is read-only by default; any change that
   grants it broader permissions is a security-relevant change, not a routine one.
 - **Secrets handling**: the LLM API key (`ANTHROPIC_API_KEY`, sourced from the `candor-llm` Secret's
