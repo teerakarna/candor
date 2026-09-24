@@ -354,10 +354,28 @@ func toHypotheses(in []llm.Hypothesis) []candorv1alpha1.Hypothesis {
 			Cause:             h.Cause,
 			Confidence:        int32(math.Round(h.Confidence * 100)),
 			Rationale:         h.Rationale,
-			RecommendedAction: h.RecommendedAction,
+			RecommendedAction: sanitizeRecommendedAction(h.RecommendedAction),
 		})
 	}
 	return out
+}
+
+// sanitizeRecommendedAction validates an LLM's recommended action against Candor's fixed catalog,
+// independent of which backend produced it. This is real defense in depth, not redundant with the
+// CRD's own `+kubebuilder:validation:Enum` on Hypothesis.RecommendedAction: without this, an
+// out-of-catalog value would make the API server reject the *whole* status update, not just drop
+// the bad field, blocking every valid hypothesis alongside it and causing an endless reconcile
+// retry against a backend that keeps producing the same bad value. Anthropic's own structured
+// outputs make this unreachable in practice today, but a less-constrained backend (docs/design.md's
+// deferred fine-tuned-model note: "the independent validation... stays necessary regardless - this
+// was one model, one test, defense in depth, not proof it holds for every model") could reach it.
+func sanitizeRecommendedAction(action string) string {
+	switch action {
+	case "", candorv1alpha1.ActionNotify, candorv1alpha1.ActionProposePullRequest:
+		return action
+	default:
+		return ""
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.

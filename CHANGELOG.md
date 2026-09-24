@@ -7,7 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Ollama LLM backend (`internal/llm/ollama`), a second implementation of `internal/llm.Client`
+  alongside Anthropic - `CANDOR_LLM_PROVIDER=ollama` (default remains `anthropic`, unaffected),
+  `CANDOR_OLLAMA_HOST` (default `http://localhost:11434`). Structured output uses a full JSON
+  schema via Ollama's `format` field, verified (issue #52) to constrain the action enum even under
+  a direct prompt-injection attempt - `format: "json"` alone does not and must never be used here.
+  Part of slice 10 (`docs/design.md`) - the webhook signal receiver half is not yet implemented.
+- `hack/ollama-dev/`: a hardened local Ollama sandbox (digest-pinned image, non-root, read-only
+  rootfs, capabilities dropped, loopback-only) for developing against the backend above.
+
 ### Security
+
+- Independent, backend-agnostic validation of an LLM's recommended action
+  (`internal/controller.sanitizeRecommendedAction`) before it reaches the CRD's own
+  `+kubebuilder:validation:Enum` - previously an out-of-catalog value would have made the whole
+  status update fail against the API server rather than being caught in application code first.
+  Anthropic's own structured outputs made this unreachable in practice, but a less-constrained
+  backend could reach it; this closes the gap for every backend, not just new ones.
 
 - Release binaries (`checksums.txt`, covering every archive) are now keyless-signed with cosign,
   same identity as the container image. Previously only the image was signed.

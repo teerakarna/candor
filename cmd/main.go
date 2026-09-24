@@ -42,6 +42,7 @@ import (
 	"github.com/teerakarna/candor/internal/gitops"
 	"github.com/teerakarna/candor/internal/llm"
 	"github.com/teerakarna/candor/internal/llm/anthropic"
+	"github.com/teerakarna/candor/internal/llm/ollama"
 	"github.com/teerakarna/candor/internal/metrics"
 	"github.com/teerakarna/candor/internal/provider"
 	"github.com/teerakarna/candor/internal/provider/trivy"
@@ -198,20 +199,44 @@ func main() {
 		setupLog.Error(err, "Failed to create controller", "controller", "signalpolicy")
 		os.Exit(1)
 	}
-	// No API key configured is a supported configuration (deterministic findings only, no LLM
-	// cost) - not an error. See FindingReconciler.LLM's doc comment.
+	// No backend configured is a supported configuration (deterministic findings only, no LLM
+	// cost) - not an error. See FindingReconciler.LLM's doc comment. CANDOR_LLM_PROVIDER defaults
+	// to "anthropic" so existing deployments (predating Ollama support) are unaffected.
 	var llmClient llm.Client
-	if apiKey := os.Getenv("ANTHROPIC_API_KEY"); apiKey != "" {
-		llmModel := anthropic.DefaultModel
-		var opts []anthropic.Option
+	llmProvider := os.Getenv("CANDOR_LLM_PROVIDER")
+	if llmProvider == "" {
+		llmProvider = "anthropic"
+	}
+	switch llmProvider {
+	case "anthropic":
+		if apiKey := os.Getenv("ANTHROPIC_API_KEY"); apiKey != "" {
+			llmModel := anthropic.DefaultModel
+			var opts []anthropic.Option
+			if m := os.Getenv("CANDOR_LLM_MODEL"); m != "" {
+				llmModel = m
+				opts = append(opts, anthropic.WithModel(m))
+			}
+			llmClient = anthropic.New(apiKey, opts...)
+			setupLog.Info("LLM enrichment enabled", "provider", "anthropic", "model", llmModel)
+		} else {
+			setupLog.Info("ANTHROPIC_API_KEY not set - LLM enrichment disabled, deterministic findings only")
+		}
+	case "ollama":
+		llmModel := ollama.DefaultModel
+		var opts []ollama.Option
 		if m := os.Getenv("CANDOR_LLM_MODEL"); m != "" {
 			llmModel = m
-			opts = append(opts, anthropic.WithModel(m))
+			opts = append(opts, ollama.WithModel(m))
 		}
-		llmClient = anthropic.New(apiKey, opts...)
-		setupLog.Info("LLM enrichment enabled", "model", llmModel)
-	} else {
-		setupLog.Info("ANTHROPIC_API_KEY not set - LLM enrichment disabled, deterministic findings only")
+		llmHost := os.Getenv("CANDOR_OLLAMA_HOST")
+		llmClient = ollama.New(llmHost, opts...)
+		if llmHost == "" {
+			llmHost = ollama.DefaultHost
+		}
+		setupLog.Info("LLM enrichment enabled", "provider", "ollama", "model", llmModel, "host", llmHost)
+	default:
+		setupLog.Error(nil, "Unknown CANDOR_LLM_PROVIDER - must be \"anthropic\" or \"ollama\"", "value", llmProvider)
+		os.Exit(1)
 	}
 
 	if err := (&controller.FindingReconciler{
