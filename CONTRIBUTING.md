@@ -9,7 +9,7 @@ fingerprinting/budget model are still settling.
 - Go (see `go.mod` for the minimum version).
 - [kubebuilder](https://book.kubebuilder.io/) 4.x.
 - `make test` (runs `envtest` against a real control plane — not mocked) and `make lint` before
-  opening a PR.
+  opening a PR. CI runs the same two via `ci.yml`, plus a k8s-version matrix and `make test-e2e`.
 - `make dev-up` for a real cluster to poke at by hand - creates (or reuses) a persistent local
   Kind cluster, builds the image, and deploys Candor onto it. Safe to re-run after a code change
   (rebuilds and redeploys). `make dev-status` / `make dev-down` alongside it. Separate from the
