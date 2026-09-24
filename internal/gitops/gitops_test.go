@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -59,7 +58,7 @@ func vulnReport(repository, tag string, fixedVersions ...string) *unstructured.U
 
 func testFinding(refKind, refName string) *candorv1alpha1.Finding {
 	return &candorv1alpha1.Finding{
-		ObjectMeta: metav1.ObjectMeta{Name: "finding", Namespace: testNamespace},
+		Name: "finding", Namespace: testNamespace,
 		Spec: candorv1alpha1.FindingSpec{
 			Source: candorv1alpha1.FindingSource{RefKind: refKind, RefName: refName},
 		},

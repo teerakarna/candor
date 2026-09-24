@@ -12,7 +12,7 @@ import (
 
 func suppression(fingerprint string, expiresAt *metav1.Time) *candorv1alpha1.Suppression {
 	return &candorv1alpha1.Suppression{
-		ObjectMeta: metav1.ObjectMeta{Name: "s1", Namespace: testNamespace},
+		Name: "s1", Namespace: testNamespace,
 		Spec: candorv1alpha1.SuppressionSpec{
 			Fingerprint: fingerprint,
 			Reason:      "known false positive, tracked in TICKET-123",

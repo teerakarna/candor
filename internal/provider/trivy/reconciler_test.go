@@ -8,7 +8,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,7 +29,7 @@ var _ = Describe("Trivy provider reconciler", func() {
 		// time.Now().UnixNano(), not GinkgoRandomSeed() - the seed is fixed for the whole run, so
 		// every spec would otherwise collide on the same namespace name.
 		namespace = fmt.Sprintf("test-%d", time.Now().UnixNano())
-		ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+		ns := &corev1.Namespace{Name: namespace}
 		Expect(k8sClient.Create(ctx, ns)).To(Succeed())
 		DeferCleanup(func() {
 			Expect(k8sClient.Delete(ctx, ns)).To(Succeed())
@@ -63,7 +62,7 @@ var _ = Describe("Trivy provider reconciler", func() {
 
 	reconcile := func(name string) {
 		r := &Reconciler{Client: k8sClient, Scheme: scheme.Scheme}
-		_, err := r.Reconcile(ctx, ctrl.Request{NamespacedName: types.NamespacedName{Namespace: namespace, Name: name}})
+		_, err := r.Reconcile(ctx, ctrl.Request{Namespace: namespace, Name: name})
 		Expect(err).NotTo(HaveOccurred())
 	}
 
@@ -80,8 +79,8 @@ var _ = Describe("Trivy provider reconciler", func() {
 
 	It("creates a Finding when a SignalPolicy opts in and the signal clears the threshold", func() {
 		policy := &candorv1alpha1.SignalPolicy{
-			ObjectMeta: metav1.ObjectMeta{Name: testPolicyName, Namespace: namespace},
-			Spec:       candorv1alpha1.SignalPolicySpec{Providers: []string{ProviderName}, MinSeverity: signal.SeverityHigh},
+			Name: testPolicyName, Namespace: namespace,
+			Spec: candorv1alpha1.SignalPolicySpec{Providers: []string{ProviderName}, MinSeverity: signal.SeverityHigh},
 		}
 		Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 
@@ -105,8 +104,8 @@ var _ = Describe("Trivy provider reconciler", func() {
 
 	It("produces no Finding for a report with zero vulnerabilities", func() {
 		policy := &candorv1alpha1.SignalPolicy{
-			ObjectMeta: metav1.ObjectMeta{Name: testPolicyName, Namespace: namespace},
-			Spec:       candorv1alpha1.SignalPolicySpec{Providers: []string{ProviderName}, MinSeverity: signal.SeverityLow},
+			Name: testPolicyName, Namespace: namespace,
+			Spec: candorv1alpha1.SignalPolicySpec{Providers: []string{ProviderName}, MinSeverity: signal.SeverityLow},
 		}
 		Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 
@@ -122,8 +121,8 @@ var _ = Describe("Trivy provider reconciler", func() {
 
 	It("resolves an existing Finding once the vulnerabilities that produced it are fixed", func() {
 		policy := &candorv1alpha1.SignalPolicy{
-			ObjectMeta: metav1.ObjectMeta{Name: testPolicyName, Namespace: namespace},
-			Spec:       candorv1alpha1.SignalPolicySpec{Providers: []string{ProviderName}, MinSeverity: signal.SeverityHigh},
+			Name: testPolicyName, Namespace: namespace,
+			Spec: candorv1alpha1.SignalPolicySpec{Providers: []string{ProviderName}, MinSeverity: signal.SeverityHigh},
 		}
 		Expect(k8sClient.Create(ctx, policy)).To(Succeed())
 

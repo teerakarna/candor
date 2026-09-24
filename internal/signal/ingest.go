@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -68,10 +67,8 @@ func Ingest(ctx context.Context, c client.Client, scheme *runtime.Scheme, sig Si
 	}
 
 	finding := &candorv1alpha1.Finding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      findingName(sig),
-			Namespace: sig.Namespace,
-		},
+		Name:      findingName(sig),
+		Namespace: sig.Namespace,
 	}
 
 	result, err := controllerutil.CreateOrUpdate(ctx, c, finding, func() error {

@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/google/go-github/v76/github"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
 )
@@ -96,8 +95,8 @@ func testRepo() *candorv1alpha1.GitOpsRepo {
 
 func testFindingForPR() *candorv1alpha1.Finding {
 	return &candorv1alpha1.Finding{
-		ObjectMeta: metav1.ObjectMeta{Name: "trivy-abc123", Namespace: "team-a"},
-		Spec:       candorv1alpha1.FindingSpec{Summary: "3 critical vulnerabilities in ghcr.io/foo/bar:v1.0.0"},
+		Name: "trivy-abc123", Namespace: "team-a",
+		Spec: candorv1alpha1.FindingSpec{Summary: "3 critical vulnerabilities in ghcr.io/foo/bar:v1.0.0"},
 		Status: candorv1alpha1.FindingStatus{
 			Fingerprint: "0123456789abcdef",
 			Hypotheses: []candorv1alpha1.Hypothesis{

@@ -18,7 +18,7 @@ import (
 
 func newTestSuppression(name string, expiresAt *metav1.Time) *candorv1alpha1.Suppression {
 	return &candorv1alpha1.Suppression{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: corev1.NamespaceDefault},
+		Name: name, Namespace: corev1.NamespaceDefault,
 		Spec: candorv1alpha1.SuppressionSpec{
 			Fingerprint: testFingerprint1,
 			Reason:      "known false positive",
@@ -42,7 +42,7 @@ func TestSuppressionReconciler_NoExpiresAt_NoOp(t *testing.T) {
 	s := newTestSuppression("s1", nil)
 	r, c := newSuppressionReconciler(t, s)
 
-	res, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: s.Namespace, Name: s.Name}})
+	res, err := r.Reconcile(context.Background(), ctrl.Request{Namespace: s.Namespace, Name: s.Name})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestSuppressionReconciler_NotYetExpired_SetsFalseAndRequeues(t *testing.T) 
 	s := newTestSuppression("s1", &future)
 	r, c := newSuppressionReconciler(t, s)
 
-	res, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: s.Namespace, Name: s.Name}})
+	res, err := r.Reconcile(context.Background(), ctrl.Request{Namespace: s.Namespace, Name: s.Name})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestSuppressionReconciler_Expired_SetsTrue(t *testing.T) {
 	s := newTestSuppression("s1", &past)
 	r, c := newSuppressionReconciler(t, s)
 
-	res, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: types.NamespacedName{Namespace: s.Namespace, Name: s.Name}})
+	res, err := r.Reconcile(context.Background(), ctrl.Request{Namespace: s.Namespace, Name: s.Name})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -25,8 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
 )
 
@@ -50,10 +48,8 @@ var _ = Describe("Finding Controller", func() {
 			err := k8sClient.Get(ctx, typeNamespacedName, finding)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &candorv1alpha1.Finding{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: resourceNamespace,
-					},
+					Name:      resourceName,
+					Namespace: resourceNamespace,
 					Spec: candorv1alpha1.FindingSpec{
 						Source: candorv1alpha1.FindingSource{
 							Provider: testProvider,

@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -13,7 +12,7 @@ import (
 
 func finding(namespace, name, severity, outcome string) *candorv1alpha1.Finding {
 	return &candorv1alpha1.Finding{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Name: name, Namespace: namespace,
 		Spec: candorv1alpha1.FindingSpec{
 			Source:   candorv1alpha1.FindingSource{Provider: "trivy", Kind: "Deployment", Name: "api", RefKind: "VulnerabilityReport", RefName: "api"},
 			Severity: severity,

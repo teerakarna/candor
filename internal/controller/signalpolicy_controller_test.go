@@ -51,10 +51,8 @@ var _ = Describe("SignalPolicy Controller", func() {
 			err := k8sClient.Get(ctx, typeNamespacedName, signalpolicy)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &candorv1alpha1.SignalPolicy{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: resourceNamespace,
-					},
+					Name:      resourceName,
+					Namespace: resourceNamespace,
 					Spec: candorv1alpha1.SignalPolicySpec{
 						Providers:   []string{testProvider},
 						MinSeverity: "HIGH",

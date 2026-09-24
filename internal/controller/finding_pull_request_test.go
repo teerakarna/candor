@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -75,7 +74,7 @@ func vulnReportWithFix() *unstructured.Unstructured {
 
 func gitOpsPolicy(maxPullRequests int32) *candorv1alpha1.SignalPolicy {
 	return &candorv1alpha1.SignalPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: testPolicyName, Namespace: corev1.NamespaceDefault},
+		Name: testPolicyName, Namespace: corev1.NamespaceDefault,
 		Spec: candorv1alpha1.SignalPolicySpec{
 			Providers: []string{testProvider},
 			GitOpsRepo: &candorv1alpha1.GitOpsRepo{
@@ -92,7 +91,7 @@ func gitOpsPolicy(maxPullRequests int32) *candorv1alpha1.SignalPolicy {
 // OperatingPolicy) doesn't mask what the test actually wants to prove.
 func permissiveOperatingPolicy() *candorv1alpha1.OperatingPolicy {
 	return &candorv1alpha1.OperatingPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: testOperatingPolicyName},
+		Name: testOperatingPolicyName,
 		Spec: candorv1alpha1.OperatingPolicySpec{
 			PullRequestRateLimit: &candorv1alpha1.PullRequestRateLimit{MaxPullRequests: 100, WindowSeconds: 86400},
 		},
@@ -101,8 +100,8 @@ func permissiveOperatingPolicy() *candorv1alpha1.OperatingPolicy {
 
 func gitHubTokenSecret() *corev1.Secret {
 	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: testSecretName, Namespace: corev1.NamespaceDefault},
-		Data:       map[string][]byte{"token": []byte("test-token")},
+		Name: testSecretName, Namespace: corev1.NamespaceDefault,
+		Data: map[string][]byte{"token": []byte("test-token")},
 	}
 }
 
@@ -111,7 +110,7 @@ func gitHubTokenSecret() *corev1.Secret {
 // logic is under test) with recommendedAction already set on its top hypothesis.
 func findingRecommending(refName, action string) *candorv1alpha1.Finding {
 	return &candorv1alpha1.Finding{
-		ObjectMeta: metav1.ObjectMeta{Name: "f1", Namespace: corev1.NamespaceDefault},
+		Name: "f1", Namespace: corev1.NamespaceDefault,
 		Spec: candorv1alpha1.FindingSpec{
 			Source: candorv1alpha1.FindingSource{
 				Provider: testProvider, Kind: testKind, Name: testResourceName,

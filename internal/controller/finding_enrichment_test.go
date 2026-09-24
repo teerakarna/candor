@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -63,7 +62,7 @@ func (f *countingLLM) Enrich(ctx context.Context, req llm.Request) (llm.Response
 
 func newTestFinding(name string) *candorv1alpha1.Finding {
 	return &candorv1alpha1.Finding{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: corev1.NamespaceDefault},
+		Name: name, Namespace: corev1.NamespaceDefault,
 		Spec: candorv1alpha1.FindingSpec{
 			Source: candorv1alpha1.FindingSource{
 				Provider: testProvider, Kind: testKind, Name: testResourceName,
@@ -188,7 +187,7 @@ func namespacedName(f *candorv1alpha1.Finding) types.NamespacedName {
 
 func testPolicy(maxCalls int32) *candorv1alpha1.SignalPolicy {
 	return &candorv1alpha1.SignalPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: testPolicyName, Namespace: corev1.NamespaceDefault},
+		Name: testPolicyName, Namespace: corev1.NamespaceDefault,
 		Spec: candorv1alpha1.SignalPolicySpec{
 			Providers: []string{testProvider},
 			Budget:    &candorv1alpha1.Budget{MaxCalls: maxCalls, WindowSeconds: 86400},

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -46,8 +45,8 @@ func newFakeClient(t *testing.T, objs ...client.Object) (client.Client, *runtime
 // namespace, so it isn't a parameter.
 func policy(name string, providers []string, minSeverity string) *candorv1alpha1.SignalPolicy {
 	return &candorv1alpha1.SignalPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace},
-		Spec:       candorv1alpha1.SignalPolicySpec{Providers: providers, MinSeverity: minSeverity},
+		Name: name, Namespace: testNamespace,
+		Spec: candorv1alpha1.SignalPolicySpec{Providers: providers, MinSeverity: minSeverity},
 	}
 }
 
