@@ -21,13 +21,27 @@ fingerprinting/budget model are still settling.
   hand-maintained things back to their generated defaults — re-apply them every time:
   - `charts/chart/values.yaml`: `manager.image.repository` back to `ghcr.io/teerakarna/candor`
   - `charts/chart/.helmignore`: the `dist/chart/*.tgz` line back to `*.tgz`
-  - `.github/workflows/test-chart.yml`: triggers back to `branches: [main]`, and the
-    `helm lint` path back to `./charts/chart`
+  - `.github/workflows/test-chart.yml`: triggers back to `branches: [main]`, the
+    `helm lint` path back to `./charts/chart`, **and its pinned action versions** - the plugin's
+    own bundled template carries older `actions/checkout`/`actions/setup-go` SHAs than whatever
+    Dependabot has since bumped them to. Discovered 2026-09-24 (slice 10's webhook receiver CRD
+    field) when a regeneration silently rolled both back several versions - `git diff` the whole
+    file after regenerating, not just the three items already listed here, since this plugin
+    template can drift in ways beyond what's been caught so far.
   - Any other custom top-level key added to `values.yaml` by hand (e.g. `grafanaDashboard`) - the
     whole file is regenerated from the plugin's own template, so a key it doesn't already know
     about is silently dropped, not merged. A custom **template** file under `charts/chart/templates/`
     (and any file under `charts/chart/files/`) is untouched, since those aren't part of kustomize's
     output - only `values.yaml` itself gets wholesale regenerated.
+  - Any Kubernetes `Service`/manifest added to `config/default/` (not part of the original
+    scaffold, e.g. `webhook_receiver_service.yaml`) lands under `charts/chart/templates/extras/`
+    once generated, and **is** wholesale-regenerated on every run - unlike the hand-written
+    custom templates described above, this one *is* plugin-derived, so any manual guard added to
+    it (e.g. `{{- if or (not (hasKey .Values.manager "enabled")) (.Values.manager.enabled) }}` to
+    match the Deployment's own enablement condition) is silently dropped too. Discovered
+    2026-09-25 (the same webhook receiver work): `helm template --set manager.enabled=false`
+    still rendered the new Service with a selector matching no pods. Re-apply the guard and
+    re-check with that same command after every regeneration.
   Verify with `helm lint charts/chart` and `helm template test charts/chart | grep image:` after.
 
 ## Design constraints that PRs must respect

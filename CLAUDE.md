@@ -30,10 +30,12 @@ delivery status. This file adds what's specific to working here as an agent.
   measurement, not the impression"). `make dev-up` and `hack/ollama-dev/` exist specifically so a
   claim about real behavior can be checked against a real cluster or a real model instead of
   inferred.
-- Sweep stray em/en dashes to plain hyphens in any file the change touches (global rule,
-  `~/.claude/CLAUDE.md`) - `grep -c '—\|–'` before every commit. This is not yet true of the whole
-  repo's existing prose (predates consistent enforcement); it only applies to files a change
-  actually touches, not a mandate to rewrite everything at once.
+- Never introduce a new em/en dash in any line a change actually adds or edits (global rule,
+  `~/.claude/CLAUDE.md`) - `git diff --cached | grep '^+' | grep -c '—\|–'` should be 0 before every
+  commit. This does **not** mean rewriting a file's pre-existing prose just because the change
+  touches that file elsewhere - most of this repo's existing docs predate consistent enforcement
+  and are full of them; leave lines you aren't otherwise editing alone. A dedicated sweep of
+  historical prose is its own change, not a side effect of an unrelated one.
 
 ## Merging
 

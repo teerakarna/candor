@@ -12,8 +12,8 @@ import (
 // Known lists the provider names a SignalPolicy may reference. Deliberately not
 // []string{trivy.ProviderName} - internal/provider/trivy's own tests need to import this package
 // (to exercise CRDInstalled), so this package importing trivy back would cycle. Keep this string
-// in sync with trivy.ProviderName by hand; there's only the one provider so far.
-var Known = []string{"trivy"}
+// in sync with trivy.ProviderName and webhook.ProviderName by hand.
+var Known = []string{"trivy", "webhook"}
 
 // IsKnown reports whether name is a recognised provider.
 func IsKnown(name string) bool {

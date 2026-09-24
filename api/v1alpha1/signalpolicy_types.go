@@ -77,6 +77,15 @@ type SignalPolicySpec struct {
 	// configuration that leaves this action uncapped.
 	// +optional
 	PullRequestBudget *PullRequestBudget `json:"pullRequestBudget,omitempty"`
+
+	// webhookReceiver enables the generic inbound signal receiver for this namespace (the
+	// "webhook" provider - docs/design.md's Signal providers, slice 10). Optional - omitted means
+	// this namespace's receiver endpoint always rejects, regardless of what's posted to it. Unlike
+	// every other guardrail in Candor, there is no conservative default here: an unauthenticated
+	// receiver that can create Findings is a spoofing vector, not a lesser version of the feature,
+	// so "not configured" fails closed rather than open.
+	// +optional
+	WebhookReceiver *WebhookReceiver `json:"webhookReceiver,omitempty"`
 }
 
 // GitOpsRepo identifies the GitOps repository and file ProposePullRequest patches, and how to
@@ -136,6 +145,19 @@ type PullRequestBudget struct {
 	// +kubebuilder:default=86400
 	// +optional
 	WindowSeconds int32 `json:"windowSeconds,omitempty"`
+}
+
+// WebhookReceiver authenticates inbound POSTs to this namespace's generic signal receiver
+// endpoint. Distinct from Webhook, which is the outbound notification sink - this is the inbound
+// counterpart, for tools that don't expose a Kubernetes CRD the way Trivy Operator does but can
+// already POST an event on their own (SonarQube on analysis completion, Falco via falcosidekick).
+type WebhookReceiver struct {
+	// secretRef names a Secret in this SignalPolicy's namespace holding the HMAC signing key under
+	// the key "secret". Every request must carry an X-Candor-Signature header
+	// ("sha256=<hex-encoded HMAC-SHA256 of the raw request body>") verified against this key -
+	// same namespaced-Role opt-in posture as GitOpsRepo.SecretRef (no cluster-wide Secret access).
+	// +required
+	SecretRef corev1.LocalObjectReference `json:"secretRef"`
 }
 
 // Webhook is a generic JSON notification sink.

@@ -214,6 +214,36 @@ spec:
                 required:
                 - url
                 type: object
+              webhookReceiver:
+                description: |-
+                  webhookReceiver enables the generic inbound signal receiver for this namespace (the
+                  "webhook" provider - docs/design.md's Signal providers, slice 10). Optional - omitted means
+                  this namespace's receiver endpoint always rejects, regardless of what's posted to it. Unlike
+                  every other guardrail in Candor, there is no conservative default here: an unauthenticated
+                  receiver that can create Findings is a spoofing vector, not a lesser version of the feature,
+                  so "not configured" fails closed rather than open.
+                properties:
+                  secretRef:
+                    description: |-
+                      secretRef names a Secret in this SignalPolicy's namespace holding the HMAC signing key under
+                      the key "secret". Every request must carry an X-Candor-Signature header
+                      ("sha256=<hex-encoded HMAC-SHA256 of the raw request body>") verified against this key -
+                      same namespaced-Role opt-in posture as GitOpsRepo.SecretRef (no cluster-wide Secret access).
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                required:
+                - secretRef
+                type: object
             required:
             - providers
             type: object

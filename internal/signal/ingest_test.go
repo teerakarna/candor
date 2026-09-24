@@ -189,6 +189,102 @@ func TestIngest_MultiplePolicies_AnyMatchAccepts(t *testing.T) {
 	}
 }
 
+// TestIngest_RestrictToPolicy_IgnoresLaxerSiblingPolicy is the regression test for a real bug
+// found via a live cluster (docs/design.md slice 10): the webhook receiver authenticates a
+// request against one specific SignalPolicy's own secret, but without RestrictToPolicy, Ingest's
+// namespace-wide "any policy accepts" semantics would let a laxer sibling policy accept (or route
+// the notification for) a signal that was only ever authenticated against a different, stricter
+// policy's credentials - defeating the point of per-policy authentication.
+func TestIngest_RestrictToPolicy_IgnoresLaxerSiblingPolicy(t *testing.T) {
+	strict := policy("strict", []string{testProvider}, SeverityCritical)
+	c, scheme := newFakeClient(t,
+		strict,
+		policy("loose", []string{testProvider}, SeverityLow),
+	)
+
+	sig := testSignal(SeverityLow)
+	sig.RestrictToPolicy = strict
+
+	result, err := Ingest(context.Background(), c, scheme, sig, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != ResultFiltered {
+		t.Errorf("result = %q, want %q - a LOW signal restricted to the CRITICAL-only \"strict\" policy must not be accepted just because \"loose\" would take it", result, ResultFiltered)
+	}
+
+	findings := &candorv1alpha1.FindingList{}
+	if err := c.List(context.Background(), findings); err != nil {
+		t.Fatal(err)
+	}
+	if len(findings.Items) != 0 {
+		t.Errorf("got %d findings, want 0", len(findings.Items))
+	}
+}
+
+// The unrestricted sibling test above (TestIngest_MultiplePolicies_AnyMatchAccepts) proves the
+// default namespace-wide behaviour is intentional and unchanged for providers with no per-object
+// policy identity (Trivy) - this proves RestrictToPolicy actually narrows it when set.
+func TestIngest_RestrictToPolicy_StillAcceptsWhenTheNamedPolicyItselfMatches(t *testing.T) {
+	strict := policy("strict", []string{testProvider}, SeverityCritical)
+	c, scheme := newFakeClient(t,
+		strict,
+		policy("loose", []string{testProvider}, SeverityLow),
+	)
+
+	sig := testSignal(SeverityCritical)
+	sig.RestrictToPolicy = strict
+
+	result, err := Ingest(context.Background(), c, scheme, sig, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != ResultCreated {
+		t.Errorf("result = %q, want %q", result, ResultCreated)
+	}
+}
+
+// TestIngest_RestrictToPolicy_DoesNotResolveFindingSiblingPolicyStillWants is the regression test
+// for a real bug found via a second /code-review high pass: findingName has no policy component,
+// so a Finding is shared namespace-wide, not owned by whichever policy happened to create it. A
+// signal authenticated against "strict" and failing "strict"'s own threshold must not resolve a
+// Finding that "loose" - a real, still-active sibling policy - would still accept.
+func TestIngest_RestrictToPolicy_DoesNotResolveFindingSiblingPolicyStillWants(t *testing.T) {
+	loose := policy("loose", []string{testProvider}, SeverityLow)
+	strict := policy("strict", []string{testProvider}, SeverityCritical)
+	c, scheme := newFakeClient(t, loose, strict)
+
+	// A LOW delivery (accepted by "loose") creates the Finding.
+	lowSig := testSignal(SeverityLow)
+	lowSig.RestrictToPolicy = loose
+	if _, err := Ingest(context.Background(), c, scheme, lowSig, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// The same underlying signal, now authenticated against "strict" instead - "strict" alone
+	// wouldn't accept a LOW severity, but "loose" still would, so the Finding must survive.
+	restrictedSig := testSignal(SeverityLow)
+	restrictedSig.RestrictToPolicy = strict
+	result, err := Ingest(context.Background(), c, scheme, restrictedSig, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result != ResultFiltered {
+		t.Errorf("result = %q, want %q", result, ResultFiltered)
+	}
+
+	findings := &candorv1alpha1.FindingList{}
+	if err := c.List(context.Background(), findings); err != nil {
+		t.Fatal(err)
+	}
+	if len(findings.Items) != 1 {
+		t.Fatalf("got %d findings, want 1 - the Finding must not have been deleted", len(findings.Items))
+	}
+	if findings.Items[0].Status.VerificationOutcome == VerificationResolved {
+		t.Error("Finding was resolved - \"loose\" still accepts this content, so a request authenticated only against \"strict\" must not resolve it")
+	}
+}
+
 func TestIngest_WritesFingerprint(t *testing.T) {
 	c, scheme := newFakeClient(t, policy("policy", []string{testProvider}, SeverityLow))
 	sig := testSignal(SeverityCritical)

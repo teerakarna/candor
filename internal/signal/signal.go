@@ -5,6 +5,8 @@
 // (later), budget accounting (later) - happens once, here, not once per provider.
 package signal
 
+import candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
+
 // Severity levels, ordered low to high. Matches the enum on SignalPolicy.Spec.MinSeverity and
 // Finding.Spec.Severity.
 const (
@@ -71,4 +73,26 @@ type Signal struct {
 	// VulnerabilityReport), for traceability back to raw evidence. Same namespace as the signal.
 	RefKind string
 	RefName string
+
+	// RestrictToPolicy, if set, limits Ingest's initial acceptance check to exactly this
+	// SignalPolicy, instead of the default namespace-wide "any policy accepts" semantics every
+	// CRD-backed provider relies on. Set by providers whose signal is authenticated against one
+	// specific policy's own credentials (the webhook receiver, verified against that policy's
+	// SecretRef) - without this, a signal authenticated against one policy's secret could be
+	// accepted by a different, laxer policy in the same namespace, defeating the point of
+	// per-policy authentication.
+	//
+	// The caller's already-fetched object, not just a name: Ingest uses it directly rather than
+	// re-fetching, both to avoid a redundant apiserver call (the caller already fetched it once
+	// to authenticate the request) and to avoid a TOCTOU window between the caller's
+	// authentication decision and Ingest's acceptance decision - a watch update landing between
+	// a re-fetch and the original Get could otherwise authenticate against one policy state and
+	// accept against a different one.
+	//
+	// Deciding whether to RESOLVE an existing Finding never uses this restriction, even when set
+	// - see Ingest's own comment on that path for why: Finding identity has no policy component,
+	// so a different, still-active sibling policy's ongoing interest in it must not be
+	// overridden by one request's narrower authorization scope. Nil for CRD-based providers
+	// (Trivy), which have no such per-object identity to restrict to.
+	RestrictToPolicy *candorv1alpha1.SignalPolicy
 }

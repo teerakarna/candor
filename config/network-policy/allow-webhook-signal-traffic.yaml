@@ -1,0 +1,24 @@
+# Allow inbound traffic to the generic webhook signal receiver (internal/provider/webhook).
+# Deliberately open to any source, unlike allow-metrics-traffic's namespace-label restriction: the
+# receiver is meant to be reachable by external tools (SonarQube, Falco, etc.), and its real access
+# control is the per-SignalPolicy HMAC signature, not network segmentation - see
+# WebhookReceiver's doc comment.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: candor
+    app.kubernetes.io/managed-by: kustomize
+  name: allow-webhook-signal-traffic
+  namespace: system
+spec:
+  podSelector:
+    matchLabels:
+      control-plane: controller-manager
+      app.kubernetes.io/name: candor
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: 9444
+          protocol: TCP

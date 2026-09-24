@@ -149,6 +149,55 @@ spec:
 It's a plain JSON POST with no vendor-specific formatting - point it at whatever turns JSON into a
 Slack/Teams/PagerDuty message (a relay, a low-code webhook, etc.).
 
+### Receiving signals from tools without a Kubernetes CRD
+
+The inbound counterpart to the section above: Trivy works out of the box because it's CRD-shaped,
+but SonarQube, Falco, and most other scanners aren't. Enable the generic receiver on a namespace's
+`SignalPolicy`, and any tool that can POST an event on its own can feed Candor - no bespoke
+provider needed.
+
+```sh
+kubectl create secret generic webhook-secret --namespace <your-namespace> \
+  --from-literal=secret=<a random HMAC signing key>
+```
+
+```yaml
+apiVersion: candor.dev/v1alpha1
+kind: SignalPolicy
+metadata:
+  name: default
+spec:
+  providers: [webhook]
+  webhookReceiver:
+    secretRef:
+      name: webhook-secret
+```
+
+POST Candor's own normalized envelope to
+`http://candor-webhook-receiver-service.candor-system:9444/webhook/<namespace>/<signalpolicy-name>`
+(the Service both the Helm chart and the kustomize base ship), signed with
+`X-Candor-Signature: sha256=<hex-encoded HMAC-SHA256 of the raw body>`:
+
+```sh
+BODY='{"severity":"HIGH","kind":"Deployment","name":"api","summary":"SQL injection risk","id":"sonarqube-issue-123"}'
+SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "<the secret above>" | awk '{print "sha256="$NF}')
+
+curl -X POST "http://candor-webhook-receiver-service.candor-system:9444/webhook/<your-namespace>/default" \
+  -H "X-Candor-Signature: $SIG" -d "$BODY"
+```
+
+`id` is the sender's own stable identifier for the underlying issue (a SonarQube issue key, a Falco
+rule+resource combination) - repeated deliveries with the same `id` update one Finding rather than
+create a new one each time, the same identity guarantee every other provider gets for free from its
+own CRD. A tool whose native webhook payload doesn't already match this shape needs a small
+transform in front - the same relay-in-front pattern the outbound sink above uses, just running the
+other direction.
+
+No `webhookReceiver` configured means that namespace's endpoint always rejects, regardless of what's
+posted to it - unlike every other guardrail in Candor, there's no conservative default here to fall
+back to. The controller needs the same namespaced-Role opt-in as `gitOpsRepo` below to read the
+Secret - no cluster-wide Secret access, ever.
+
 ### Proposing GitOps pull requests
 
 Candor's default write path is a pull request against your GitOps repo, never a direct cluster

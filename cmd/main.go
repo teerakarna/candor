@@ -19,6 +19,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 	"time"
 
@@ -26,10 +27,12 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
@@ -46,6 +49,7 @@ import (
 	"github.com/teerakarna/candor/internal/metrics"
 	"github.com/teerakarna/candor/internal/provider"
 	"github.com/teerakarna/candor/internal/provider/trivy"
+	signalwebhook "github.com/teerakarna/candor/internal/provider/webhook"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -85,6 +89,10 @@ func main() {
 	flag.StringVar(&webhookCertKey, "webhook-cert-key", "tls.key", "The name of the webhook key file.")
 	flag.IntVar(&webhookPort, "webhook-port", 9443, "Port the webhook server listens on. "+
 		"Defaults to 9443. Set -1 to disable the webhook server.")
+	var signalReceiverPort int
+	flag.IntVar(&signalReceiverPort, "signal-receiver-port", 9444, "Port the generic inbound signal "+
+		"receiver listens on (internal/provider/webhook - unrelated to the admission webhook server "+
+		"above, which speaks AdmissionReview, not signal payloads). Set 0 to disable it.")
 	flag.StringVar(&metricsCertPath, "metrics-cert-path", "",
 		"The directory that contains the metrics server certificate.")
 	flag.StringVar(&metricsCertName, "metrics-cert-name", "tls.crt", "The name of the metrics server certificate file.")
@@ -163,7 +171,19 @@ func main() {
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
+		Scheme: scheme,
+		// The manager's default client caches every type it reads via a List+Watch informer.
+		// Secrets are read by name only (GitOpsRepo.SecretRef, WebhookReceiver.SecretRef) - the
+		// ServiceAccount deliberately has no cluster-wide list/watch on Secrets (KSV-0041; a
+		// namespaced Role grants get on one named Secret only), so a cached Get would block
+		// forever waiting for an informer sync that can never succeed. Confirmed for real against
+		// a live cluster (not caught by any fake-client or envtest-with-admin-creds test, which
+		// bypass RBAC entirely): the reflector logs "secrets is forbidden ... at the cluster
+		// scope" and retries indefinitely, hanging every caller of a cached Secret Get, including
+		// the webhook receiver and the pre-existing GitOpsRepo path, silently, with no timeout.
+		Client: client.Options{
+			Cache: &client.CacheOptions{DisableFor: []client.Object{&corev1.Secret{}}},
+		},
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
@@ -296,6 +316,21 @@ func main() {
 	if err := mgr.Add(&controller.DigestRunnable{Client: mgr.GetClient(), Interval: digestInterval}); err != nil {
 		setupLog.Error(err, "Failed to add digest runnable")
 		os.Exit(1)
+	}
+
+	if signalReceiverPort > 0 {
+		receiver := &signalwebhook.Receiver{
+			Client: mgr.GetClient(),
+			Scheme: mgr.GetScheme(),
+			Addr:   fmt.Sprintf(":%d", signalReceiverPort),
+		}
+		if err := mgr.Add(receiver); err != nil {
+			setupLog.Error(err, "Failed to add webhook signal receiver")
+			os.Exit(1)
+		}
+		setupLog.Info("Webhook signal receiver enabled", "port", signalReceiverPort)
+	} else {
+		setupLog.Info("signal-receiver-port is 0 - webhook signal receiver disabled")
 	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {

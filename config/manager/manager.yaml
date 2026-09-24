@@ -80,6 +80,9 @@ spec:
         - containerPort: 8081
           name: health
           protocol: TCP
+        - containerPort: 9444
+          name: webhook-signal
+          protocol: TCP
         securityContext:
           readOnlyRootFilesystem: true
           allowPrivilegeEscalation: false

@@ -76,9 +76,20 @@ var (
 		Name: "candor_webhook_sends_total",
 		Help: "Total webhook notification/digest sends, by result (success|error).",
 	}, []string{labelResult})
+
+	// WebhookReceiverUp is 1 while internal/provider/webhook.Receiver's HTTP server is running, 0
+	// from the moment it stops for any reason. Receiver.Start deliberately never returns a non-nil
+	// error (a bind failure there must not crash the whole manager and every unrelated reconciler
+	// with it - see its own doc comment), which means a dead receiver is otherwise invisible: the
+	// manager's healthz/readyz stay green regardless, and only a log line marks it. This is the
+	// thing to alert on instead of relying on someone noticing Findings have stopped appearing.
+	WebhookReceiverUp = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "candor_webhook_receiver_up",
+		Help: "1 while the webhook signal receiver's HTTP server is running, 0 from the moment it stops for any reason.",
+	})
 )
 
 func init() {
 	metrics.Registry.MustRegister(LLMCallsTotal, EnrichmentSkippedTotal, BudgetCallsUsed, BudgetCallsLimit,
-		VerificationTransitionsTotal, WebhookSendsTotal, PullRequestsTotal)
+		VerificationTransitionsTotal, WebhookSendsTotal, PullRequestsTotal, WebhookReceiverUp)
 }

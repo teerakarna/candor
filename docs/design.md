@@ -350,14 +350,98 @@ budget explicitly, or it is not a solution.
    gains no cluster-wide Secret access for this - a namespace enabling it grants a namespaced Role
    naming the one Secret explicitly (Trivy's config scan, KSV-0041, caught the cluster-wide version
    of this before merge). Released as `v0.1.0`, the first tagged release.
-10. Generic webhook signal receiver + Ollama LLM backend. Revised 2026-09-24 from "second provider
-    (webhook ingest) + second LLM backend — proves both interfaces actually abstract" to name the
-    actual motivation: adoption, not abstraction-proving for its own sake. The mandatory hosted-API
-    dependency (`ANTHROPIC_API_KEY`, real per-call spend) is genuine friction for the self-hosted,
-    cost-sensitive, sometimes air-gapped shops this project targets - Ollama removes it. The webhook
-    receiver is the cheaper way to add SonarQube, Falco, and similar tools: none exposes a
-    Kubernetes CRD the way Trivy Operator does, but all of them can already POST on their own, so
-    one receiver unlocks several tools instead of a bespoke CRD-watching provider per tool.
+10. Generic webhook signal receiver + Ollama LLM backend. **Done.** Revised 2026-09-24 from "second
+    provider (webhook ingest) + second LLM backend - proves both interfaces actually abstract" to
+    name the actual motivation: adoption, not abstraction-proving for its own sake. The mandatory
+    hosted-API dependency (`ANTHROPIC_API_KEY`, real per-call spend) is genuine friction for the
+    self-hosted, cost-sensitive, sometimes air-gapped shops this project targets - Ollama removes
+    it (`internal/llm/ollama`, issues #52/#53). The webhook receiver
+    (`internal/provider/webhook`, issues #50/#51) is the cheaper way to add SonarQube, Falco, and
+    similar tools: none exposes a Kubernetes CRD the way Trivy Operator does, but all of them can
+    already POST on their own, so one receiver unlocks several tools instead of a bespoke
+    CRD-watching provider per tool. Ships with its own brake: `SignalPolicy.spec.webhookReceiver`
+    is required, not optional-with-a-default - the one guardrail in Candor with no conservative
+    fallback, since an unauthenticated receiver that can create Findings is a spoofing vector, not
+    a lesser version of the feature. Every request is HMAC-signed and constant-time-compared
+    against a per-namespace Secret, same namespaced-Role opt-in as `GitOpsRepo.SecretRef` (no
+    cluster-wide Secret access, ever). A webhook-sourced Finding has no owner reference - unlike a
+    CRD-backed provider, there's no persistent Kubernetes object behind the delivery to own it, so
+    it won't be garbage-collected the way a Trivy-sourced Finding is when its source is deleted, a
+    real and documented consequence of accepting external signals, not an oversight.
+
+    **A real, significant bug was found and fixed only because this shipped with genuine
+    real-cluster verification, not fake-client or envtest unit tests alone.** `ctrl.NewManager`'s
+    default client caches every type it reads via List+Watch informers. Since the ServiceAccount
+    deliberately has no cluster-wide list/watch on Secrets (KSV-0041), a cached `Get` on a named
+    Secret blocked forever - the reflector logged `secrets is forbidden ... at the cluster scope`
+    and retried indefinitely, hanging every caller silently, with no timeout and no error. This
+    affected the webhook receiver's Secret read *and* the pre-existing `GitOpsRepo.SecretRef` read
+    from slice 9 - the same latent bug had shipped undetected since then, because fake clients
+    don't simulate caching or RBAC, and envtest's default client bypasses RBAC entirely. Fixed via
+    `Client.Cache.DisableFor` on the manager (`cmd/main.go`), verified against a live Kind cluster:
+    before the fix, a real signed webhook request timed out completely; after, it returned 202 and
+    created a Finding correctly. Automated coverage for this specific class of bug is tracked
+    separately (#58) rather than bundled here, since it needs RBAC-scoped test infrastructure the
+    current suite doesn't have.
+
+    **A single `/code-review high` pass before opening the PR found five more real issues, none
+    caught by the test suite that existed at that point** (candor's own new `CLAUDE.md`, written
+    the same day): the receiver was gated behind leader election so a non-leader replica in a
+    multi-replica deployment never started it at all; no Service or container port actually
+    exposed port 9444, so the feature compiled and unit-tested clean while being unreachable via
+    any standard `make deploy`/`helm install`; a signal authenticated against one `SignalPolicy`'s
+    secret could be accepted or routed by a different, laxer policy in the same namespace, since
+    `Ingest`'s namespace-wide acceptance semantics (correct for Trivy) didn't account for a
+    provider where authentication binds to one specific policy; a `SignalPolicy` enabling
+    `webhook` without configuring `webhookReceiver` reported `Ready: True` despite the receiver
+    failing closed for it; and an oversized body was silently truncated before signature
+    verification, surfacing as a misleading 401 instead of a clear size-limit error. All five
+    fixed, each with a regression test, and the leader-election and Service fixes re-verified
+    against a real 2-replica cluster deployment specifically because neither is something a unit
+    test can observe. **A second `/code-review high` pass, run again per the same `CLAUDE.md` rule
+    ("re-run after fixing what it finds, not just once"), found six more**: a `Start` error would
+    have crashed the whole manager rather than just the receiver (controller-runtime shares one
+    error channel across every Runnable); no `ReadTimeout` left the receiver open to a
+    slowloris-shaped stall; a policy wrong in two ways at once only ever reported the first; a
+    wasteful re-List where a targeted Get was already possible; a missing log line on one specific
+    apiserver-Get failure path; and a hardcoded error-message string that could drift from the
+    constants it was describing. All six fixed, two lower-severity findings deliberately deferred
+    (#61, #62) with reasoning recorded on each issue rather than bundled in. **A third pass found
+    the deepest one yet**: `RestrictToPolicy` correctly scoped *authentication*, but the resolve
+    path still used that same narrowed view to decide whether an existing Finding should close -
+    since `findingName` has no policy component, a Finding is namespace-wide, and a sibling
+    policy's still-active interest in it must never be overridden by one request's narrower
+    authorization scope. Also closed the redundant Get and the TOCTOU window between it and the
+    original authenticating Get by having `RestrictToPolicy` carry the already-fetched object
+    directly rather than just its name. **A fourth pass found the request-handling order itself
+    was wrong**: reading the body only after two apiserver calls let apiserver latency eat into
+    the same `http.Server` `ReadTimeout` budget the body read needed, since that timeout runs from
+    request start regardless of when the handler gets around to reading - fixed by reading the
+    body first. Also caught a test that never exercised the code path it claimed to (an
+    auto-populated `Content-Length` meant it never reached the `io.LimitReader` logic), and a
+    plugin-generated Helm Service template with no enablement guard, unlike the Deployment it
+    fronts - a fifth regeneration gotcha now in `CONTRIBUTING.md`. **A fifth pass found the
+    previous fix incomplete on both its own findings**: the body-read reordering moved the read,
+    but not the handler's own timeout, which still started before it, defeating the point; and the
+    `Start` fix from an earlier pass only covered the `ListenAndServe` error branch, leaving the
+    graceful-shutdown branch still capable of propagating a fatal error to the whole manager the
+    same way. **A sixth pass found the deepest identity bug yet**: `Provider` and `RefKind`'s
+    sentinel were both fixed constants for every webhook delivery, so Finding identity collapsed to
+    the sender-supplied `id` alone - two different tools behind two different policies picking
+    overlapping ID schemes would have silently shared one Finding. `RefKind` now includes the
+    authenticated policy's name. **A seventh pass found a real observability gap and a now-provable
+    redundancy**: `Receiver.Start` never returning an error (necessary) meant a dead receiver was
+    otherwise invisible - a new `candor_webhook_receiver_up` gauge is the alertable signal instead.
+    It also proved the round-six `RefKind` scoping makes an earlier round's sibling-policy check
+    unreachable for the only caller that sets it - kept anyway, since removing it would couple
+    `Ingest`'s own correctness to one caller's current construction rather than standing on its own.
+    **An eighth pass found the new gauge itself had a race**, no write/idle timeout hardening to
+    match the read side, and that enabling the chart's existing `networkPolicy.enabled` toggle
+    would have silently dropped every webhook request at the network layer - the one failure mode
+    on this path that wouldn't have been observable. All three fixed; investigating the third
+    surfaced a real, pre-existing, broader gap (`config/network-policy/` disconnected from
+    `config/default` entirely, tracked separately as #64, not fixed here). `CHANGELOG.md` has the
+    full list from all eight passes; not duplicated here.
 11. GitLab GitOps backend. `internal/gitops.Opener` is already an interface with one implementation
     (`GitHubOpener`) - this is a second implementation behind it, not a core change.
 12. Fixture suite + published per-model accuracy. The evidence gap #7's answer already promises

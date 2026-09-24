@@ -47,23 +47,73 @@ const (
 // owner becomes the Finding's owner reference (e.g. the originating VulnerabilityReport), so the
 // Finding is garbage-collected automatically when its source signal object is deleted.
 func Ingest(ctx context.Context, c client.Client, scheme *runtime.Scheme, sig Signal, owner client.Object) (Result, error) {
-	policies := &candorv1alpha1.SignalPolicyList{}
-	if err := c.List(ctx, policies, client.InNamespace(sig.Namespace)); err != nil {
-		return "", fmt.Errorf("listing SignalPolicies in namespace %s: %w", sig.Namespace, err)
+	relevantPolicies, err := listRelevantPolicies(ctx, c, sig)
+	if err != nil {
+		return "", err
 	}
 
-	if !anyPolicyAccepts(policies.Items, sig) {
-		resolvedFinding, err := resolveIfOpen(ctx, c, sig.Namespace, findingName(sig))
-		if err != nil {
-			return "", err
-		}
-		if resolvedFinding != nil {
-			if webhook := webhookFor(policies.Items, sig.Provider); webhook != nil {
-				notifyEvent(ctx, webhook.URL, notify.KindFindingResolved, resolvedFinding)
+	if !anyPolicyAccepts(relevantPolicies, sig) {
+		// One Get, reused for both the existence check and (if warranted) the resolve write below
+		// - not a separate existence check followed by a second Get on the same object. Most
+		// filtered signals from a chatty source have no open Finding at all, and this Get is far
+		// cheaper than the namespace-wide List the broader check below requires, so it's worth
+		// doing first regardless.
+		findingKey := client.ObjectKey{Namespace: sig.Namespace, Name: findingName(sig)}
+		existing := &candorv1alpha1.Finding{}
+		if err := c.Get(ctx, findingKey, existing); err != nil {
+			if apierrors.IsNotFound(err) {
+				return ResultFiltered, nil
 			}
-			return ResultResolved, nil
+			return "", fmt.Errorf("getting Finding %s: %w", findingKey, err)
 		}
-		return ResultFiltered, nil
+		if existing.Status.VerificationOutcome == VerificationResolved {
+			return ResultFiltered, nil
+		}
+
+		// Whether to actually RESOLVE an existing Finding must never be narrowed to just the
+		// policy this particular request authenticated against: findingName has no policy
+		// component in general, so a Finding is namespace-wide, shared by every policy that could
+		// produce it - a different, still-active sibling policy's ongoing interest in it must not
+		// be overridden just because this one request's authorization happens to be scoped
+		// narrower. Re-check against every policy in the namespace before resolving anything.
+		//
+		// Provably redundant for the only current caller, kept anyway: the webhook receiver
+		// happens to fold its own policy name into RefKind (see refKindPrefix's doc comment), so a
+		// Finding this branch would ever fetch could only have been produced by the very policy
+		// already being checked - no sibling policy's key could collide with it. But that's a fact
+		// about one caller's current RefKind construction, not something Ingest should have to
+		// know or assume to stay correct; coupling this safety net to it would mean a future
+		// change to that construction (or a second RestrictToPolicy-setting provider that doesn't
+		// scope RefKind the same way) silently reintroduces the original bug with nothing left to
+		// catch it. The extra List only runs on an already-uncommon path (filtered signal, Finding
+		// still open), so the cost of keeping it is small next to what removing it would risk.
+		resolutionPolicies := relevantPolicies
+		if sig.RestrictToPolicy != nil {
+			resolutionPolicies, err = listNamespacePolicies(ctx, c, sig.Namespace)
+			if err != nil {
+				return "", err
+			}
+			if anyPolicyAccepts(resolutionPolicies, sig) {
+				// Some other policy in the namespace still accepts this content - not this
+				// request's call to resolve a Finding that policy still considers open.
+				return ResultFiltered, nil
+			}
+		}
+
+		// existing.Spec.Severity is still the last real severity before this resolution - only
+		// Status is touched below, so this reports what was resolved, not the filtered-out signal
+		// that triggered the resolution (which may have no severity at all, e.g. a Trivy report
+		// that dropped to zero vulnerabilities).
+		severity := existing.Spec.Severity
+		existing.Status.VerificationOutcome = VerificationResolved
+		if err := c.Status().Update(ctx, existing); err != nil {
+			return "", fmt.Errorf("resolving Finding %s: %w", findingKey, err)
+		}
+		metrics.VerificationTransitionsTotal.WithLabelValues(verificationMetricLabel[VerificationResolved], severity).Inc()
+		if webhook := webhookFor(resolutionPolicies, sig.Provider); webhook != nil {
+			notifyEvent(ctx, webhook.URL, notify.KindFindingResolved, existing)
+		}
+		return ResultResolved, nil
 	}
 
 	finding := &candorv1alpha1.Finding{
@@ -139,7 +189,7 @@ func Ingest(ctx context.Context, c client.Client, scheme *runtime.Scheme, sig Si
 	// Notify on a brand new Finding, or on an existing one recurring - not on every routine
 	// content refresh (ResultUpdated with no outcome change) or unchanged reconcile, which would
 	// just be noise.
-	if webhook := webhookFor(policies.Items, sig.Provider); webhook != nil {
+	if webhook := webhookFor(relevantPolicies, sig.Provider); webhook != nil {
 		switch {
 		case finalResult == ResultCreated:
 			notifyEvent(ctx, webhook.URL, notify.KindFindingCreated, finding)
@@ -199,6 +249,32 @@ func anyPolicyAccepts(policies []candorv1alpha1.SignalPolicy, sig Signal) bool {
 	return false
 }
 
+// listRelevantPolicies returns the SignalPolicies Ingest should consider for sig: every policy in
+// its namespace by default, or exactly the one named by sig.RestrictToPolicy when set - fetched
+// with a single Get rather than a namespace-wide List, since the caller that set
+// RestrictToPolicy (the webhook receiver) already resolved that exact object once to authenticate
+// the request in the first place - no re-fetch, no TOCTOU window between the caller's
+// authentication decision and this acceptance decision (see Signal.RestrictToPolicy's doc
+// comment). Never falls back to the full namespace list, which would silently reintroduce the
+// namespace-wide "any policy accepts" behaviour RestrictToPolicy exists specifically to avoid.
+func listRelevantPolicies(ctx context.Context, c client.Client, sig Signal) ([]candorv1alpha1.SignalPolicy, error) {
+	if sig.RestrictToPolicy == nil {
+		return listNamespacePolicies(ctx, c, sig.Namespace)
+	}
+	return []candorv1alpha1.SignalPolicy{*sig.RestrictToPolicy}, nil
+}
+
+// listNamespacePolicies lists every SignalPolicy in namespace, unrestricted - the namespace-wide
+// view Ingest's own comment on the resolve path requires regardless of any per-request
+// RestrictToPolicy.
+func listNamespacePolicies(ctx context.Context, c client.Client, namespace string) ([]candorv1alpha1.SignalPolicy, error) {
+	policies := &candorv1alpha1.SignalPolicyList{}
+	if err := c.List(ctx, policies, client.InNamespace(namespace)); err != nil {
+		return nil, fmt.Errorf("listing SignalPolicies in namespace %s: %w", namespace, err)
+	}
+	return policies.Items, nil
+}
+
 func providerEnabled(providers []string, provider string) bool {
 	return slices.Contains(providers, provider)
 }
@@ -210,38 +286,6 @@ var verificationMetricLabel = map[string]string{
 	VerificationStillPresent: "still_present",
 	VerificationResolved:     "resolved",
 	VerificationRecurred:     "recurred",
-}
-
-// resolveIfOpen marks the Finding at namespace/name Resolved, if one exists and isn't already,
-// and returns it (for the caller to notify with) - or nil, nil as a no-op (not an error) in the
-// common case: most filtered signals never had a Finding to begin with, and a Finding already
-// Resolved doesn't need writing, or reporting, again. Called when a signal is filtered (no
-// SignalPolicy accepts it - either none opts into this provider, or its severity fell below every
-// threshold that does), so a Finding whose underlying condition has genuinely gone away doesn't
-// sit there stale forever showing the old severity.
-func resolveIfOpen(ctx context.Context, c client.Client, namespace, name string) (*candorv1alpha1.Finding, error) {
-	finding := &candorv1alpha1.Finding{}
-	if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, finding); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("getting Finding %s/%s: %w", namespace, name, err)
-	}
-	if finding.Status.VerificationOutcome == VerificationResolved {
-		return nil, nil
-	}
-
-	// finding.Spec.Severity is still the last real severity before this resolution -
-	// resolveIfOpen only ever touches Status, so this reports what was resolved, not the
-	// filtered-out signal that triggered the resolution (which may have no severity at all, e.g.
-	// a Trivy report that dropped to zero vulnerabilities).
-	severity := finding.Spec.Severity
-	finding.Status.VerificationOutcome = VerificationResolved
-	if err := c.Status().Update(ctx, finding); err != nil {
-		return nil, fmt.Errorf("resolving Finding %s/%s: %w", namespace, name, err)
-	}
-	metrics.VerificationTransitionsTotal.WithLabelValues(verificationMetricLabel[VerificationResolved], severity).Inc()
-	return finding, nil
 }
 
 // findingName derives a stable Finding object name from the signal's source identity (not its

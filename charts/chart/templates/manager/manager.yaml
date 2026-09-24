@@ -118,6 +118,9 @@ spec:
         - containerPort: {{ .Values.manager.healthProbe.port }}
           name: health
           protocol: TCP
+        - containerPort: 9444
+          name: webhook-signal
+          protocol: TCP
         readinessProbe:
           httpGet:
             path: /readyz
