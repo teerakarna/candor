@@ -1,0 +1,33 @@
+services:
+  ollama:
+    # Digest-pinned (0.13.0 at time of writing), same discipline as every image reference elsewhere
+    # in this repo - see `crane digest docker.io/ollama/ollama:<tag>` to refresh.
+    image: docker.io/ollama/ollama@sha256:d4188c1dfa870386a14e299976aed96daeb83876b69e1a852c9d09ea76463b9f
+    container_name: ollama-dev
+    # The image defaults to root (no USER in its own config). Force non-root explicitly - the
+    # image's own /etc/passwd maps 1000:1000 to "ubuntu", home /home/ubuntu, which is why the
+    # volume below and HOME env below both point there, not at /root. Getting this wrong fails
+    # with "mkdir /home/ubuntu/.ollama: read-only file system", not an obvious permissions error.
+    user: "1000:1000"
+    environment:
+      - HOME=/home/ubuntu
+    # Loopback only - do not change to "11434:11434" (binds 0.0.0.0) without deliberately deciding
+    # this should be reachable from the LAN.
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-models:/home/ubuntu/.ollama
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=512m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 4g
+    cpus: 4
+    restart: "no"
+
+volumes:
+  ollama-models:
