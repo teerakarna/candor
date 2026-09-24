@@ -5,9 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -29,15 +27,15 @@ func operatingPolicyTestScheme(t *testing.T) *runtime.Scheme {
 func TestOperatingPolicyReconciler_ModeChange_EmitsEvent(t *testing.T) {
 	scheme := operatingPolicyTestScheme(t)
 	policy := &candorv1alpha1.OperatingPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: testOperatingPolicyName},
-		Spec:       candorv1alpha1.OperatingPolicySpec{Mode: candorv1alpha1.OperatingModeActive},
+		Name: testOperatingPolicyName,
+		Spec: candorv1alpha1.OperatingPolicySpec{Mode: candorv1alpha1.OperatingModeActive},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(policy).
 		WithStatusSubresource(&candorv1alpha1.OperatingPolicy{}).Build()
 	recorder := record.NewFakeRecorder(10)
 	r := &OperatingPolicyReconciler{Client: c, Scheme: scheme, Recorder: recorder}
 	ctx := context.Background()
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: testOperatingPolicyName}}
+	req := ctrl.Request{Name: testOperatingPolicyName}
 
 	// First reconcile: ObservedMode starts empty, so this establishes the baseline - no
 	// transition, no event, matching NeedsEnrichment's own "nothing to compare against yet" case.
@@ -87,15 +85,15 @@ func TestOperatingPolicyReconciler_ModeChange_EmitsEvent(t *testing.T) {
 func TestOperatingPolicyReconciler_NoModeChange_NoEvent(t *testing.T) {
 	scheme := operatingPolicyTestScheme(t)
 	policy := &candorv1alpha1.OperatingPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: testOperatingPolicyName},
-		Spec:       candorv1alpha1.OperatingPolicySpec{Mode: candorv1alpha1.OperatingModeActive},
+		Name: testOperatingPolicyName,
+		Spec: candorv1alpha1.OperatingPolicySpec{Mode: candorv1alpha1.OperatingModeActive},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(policy).
 		WithStatusSubresource(&candorv1alpha1.OperatingPolicy{}).Build()
 	recorder := record.NewFakeRecorder(10)
 	r := &OperatingPolicyReconciler{Client: c, Scheme: scheme, Recorder: recorder}
 	ctx := context.Background()
-	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: testOperatingPolicyName}}
+	req := ctrl.Request{Name: testOperatingPolicyName}
 
 	for i := range 3 {
 		if _, err := r.Reconcile(ctx, req); err != nil {

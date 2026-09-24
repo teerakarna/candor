@@ -35,7 +35,7 @@ jobs:
           node-version: "24"
 
       - name: Install mermaid-cli
-        run: npm install -g @mermaid-js/mermaid-cli
+        run: npm install -g @mermaid-js/mermaid-cli@11.17.0
 
       - name: Render diagrams and check for drift
         # mermaid-cli ships puppeteer-core (no bundled browser); point it at the Chrome

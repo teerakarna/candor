@@ -25,7 +25,7 @@ func newOperatingPolicyClient(t *testing.T, objs ...client.Object) client.Client
 
 func operatingPolicy(name string, maxPullRequests int32) *candorv1alpha1.OperatingPolicy {
 	return &candorv1alpha1.OperatingPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Name: name,
 		Spec: candorv1alpha1.OperatingPolicySpec{
 			PullRequestRateLimit: &candorv1alpha1.PullRequestRateLimit{MaxPullRequests: maxPullRequests, WindowSeconds: 86400},
 		},
@@ -83,7 +83,7 @@ func TestCheckGlobalPullRequestBudget_NoOperatingPolicy_DeniesRatherThanDefaulti
 }
 
 func TestCheckGlobalPullRequestBudget_OmittedRateLimit_AppliesConservativeDefault(t *testing.T) {
-	p := &candorv1alpha1.OperatingPolicy{ObjectMeta: metav1.ObjectMeta{Name: defaultOperatingPolicyName}} // no PullRequestRateLimit
+	p := &candorv1alpha1.OperatingPolicy{Name: defaultOperatingPolicyName} // no PullRequestRateLimit
 	c := newOperatingPolicyClient(t, p)
 	ctx := context.Background()
 

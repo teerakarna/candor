@@ -21,7 +21,7 @@ import (
 // changes the Finding's fingerprint instead, which is the real-world equivalent anyway.
 func newTestSuppressionFor(reason string, expiresAt *metav1.Time) *candorv1alpha1.Suppression {
 	return &candorv1alpha1.Suppression{
-		ObjectMeta: metav1.ObjectMeta{Name: "suppression", Namespace: corev1.NamespaceDefault},
+		Name: "suppression", Namespace: corev1.NamespaceDefault,
 		Spec: candorv1alpha1.SuppressionSpec{
 			Fingerprint: testFingerprint1,
 			Reason:      reason,

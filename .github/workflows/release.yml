@@ -4,6 +4,10 @@ on:
   push:
     tags: ["v*.*.*"]
 
+# Every job below declares its own least-privilege permissions already - this is a defense-in-depth
+# default so a job added later without its own block doesn't inherit the repo's default token scope.
+permissions: {}
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}

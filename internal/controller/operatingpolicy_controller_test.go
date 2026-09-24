@@ -46,7 +46,7 @@ var _ = Describe("OperatingPolicy Controller", func() {
 			err := k8sClient.Get(ctx, typeNamespacedName, operatingpolicy)
 			if err != nil && errors.IsNotFound(err) {
 				resource := &candorv1alpha1.OperatingPolicy{
-					ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+					Name: resourceName,
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
