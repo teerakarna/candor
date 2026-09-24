@@ -145,19 +145,30 @@ are plausible later additions, not v1.
 ## Architecture
 
 - **Signal providers**: a Go interface normalizing heterogeneous input into a common `Signal`. v1
-  ships Trivy `VulnerabilityReport` CRs and a generic webhook receiver. Falco, Alertmanager, etc.
-  slot in later without changing the core.
+  ships Trivy `VulnerabilityReport` CRs only. A generic webhook *receiver* (as opposed to
+  `internal/notify`'s outbound sink, which already exists) is slice 10, not v1 - this bullet
+  previously claimed it shipped with v1; it didn't, corrected 2026-09-24. Falco, SonarQube,
+  Alertmanager, etc. slot in behind that receiver once it exists, without a bespoke CRD-watching
+  provider each - none of them expose a Kubernetes CRD the way Trivy Operator does, but all of them
+  can already POST a webhook on their own (SonarQube on analysis completion, Falco via
+  falcosidekick), so one receiver unlocks several tools at once.
 - **Fingerprint + budget layer**: sits between signals and the model. The load-bearing
   differentiator — nothing reaches the LLM without passing through it.
 - **LLM abstraction**: pluggable interface. Anthropic is the v1 implementation (structured output,
-  one env var, no local-model setup friction). OpenAI/Ollama follow later as proof the interface
-  actually abstracts.
+  one env var, no local-model setup friction). Ollama is next (slice 10), not OpenAI - the reason
+  is adoption, not novelty: a mandatory hosted-API dependency and its per-call spend is real
+  friction for the self-hosted, cost-sensitive, sometimes air-gapped shops this project targets,
+  and Ollama removes both. OpenAI remains a plausible third implementation, just not the one that
+  answers a real blocker.
 - **Action catalog**: fixed and enumerated. v1 ships `Notify` and `ProposePullRequest`.
   `IsolateServiceTraffic` (the kept quarantine idea) lands only once the verification loop is
   demonstrably working — it's the highest-risk action and earns its place last.
 - **CRDs**: `SignalPolicy` (scope, providers, guardrails, mode, budget), `Finding` (one per
   fingerprint; ranked hypotheses, confidence, verification outcome), `Suppression`.
 - **API group**: `candor.dev/v1alpha1`.
+- **GitOps backend**: `internal/gitops.Opener` is already an interface with one implementation
+  (`GitHubOpener`). GitLab is slice 11 - a second implementation behind the same interface, not a
+  core change.
 
 ## Every accelerator ships with its brake
 
@@ -339,8 +350,21 @@ budget explicitly, or it is not a solution.
    gains no cluster-wide Secret access for this - a namespace enabling it grants a namespaced Role
    naming the one Secret explicitly (Trivy's config scan, KSV-0041, caught the cluster-wide version
    of this before merge). Released as `v0.1.0`, the first tagged release.
-10. Second provider (webhook ingest) + second LLM backend — proves both interfaces actually abstract.
-11. Blog article.
+10. Generic webhook signal receiver + Ollama LLM backend. Revised 2026-09-24 from "second provider
+    (webhook ingest) + second LLM backend — proves both interfaces actually abstract" to name the
+    actual motivation: adoption, not abstraction-proving for its own sake. The mandatory hosted-API
+    dependency (`ANTHROPIC_API_KEY`, real per-call spend) is genuine friction for the self-hosted,
+    cost-sensitive, sometimes air-gapped shops this project targets - Ollama removes it. The webhook
+    receiver is the cheaper way to add SonarQube, Falco, and similar tools: none exposes a
+    Kubernetes CRD the way Trivy Operator does, but all of them can already POST on their own, so
+    one receiver unlocks several tools instead of a bespoke CRD-watching provider per tool.
+11. GitLab GitOps backend. `internal/gitops.Opener` is already an interface with one implementation
+    (`GitHubOpener`) - this is a second implementation behind it, not a core change.
+12. Fixture suite + published per-model accuracy. The evidence gap #7's answer already promises
+    ("per-model accuracy is measured and published against a fixture suite, not asserted") and
+    that Candor doesn't yet have. Required before any claim about a smaller or fine-tuned model's
+    accuracy - see the deferred item below, which depends on this slice existing first.
+13. Blog article.
 
 Quarantine/Enforcing mode is explicitly post-v1, gated on slice 7.
 
@@ -348,6 +372,18 @@ Deferred, deliberately not slice 1: SLSA provenance for the goreleaser-built bin
 container image already gets buildx's native provenance attestation — the binaries would need the
 official `slsa-framework/slsa-github-generator` reusable workflow, which is a real new job wired to
 goreleaser's checksums, not a small extension of what already exists).
+
+Deferred, deliberately not scoped as a slice: a fine-tuned or distilled model for the specific
+tool set Candor targets (Trivy/SonarQube/Falco-shaped findings, ranking hypotheses, picking from
+the fixed action catalog). The task is narrow enough that a small open model plausibly does it
+well - much narrower than general chat - so this isn't dismissed as infeasible. But training one
+before slice 12's fixture suite exists to measure it against would be exactly the kind of
+unverified claim this project's whole thesis argues against: the right sequence is (a) Ollama
+support (slice 10), (b) measure a good off-the-shelf open model against the hosted default on the
+fixture suite, (c) only fine-tune if that measurement shows a real, published gap. Grammar-
+constrained output also isn't automatic outside Anthropic's structured-outputs API for a
+locally-served model - Ollama's JSON-schema mode or an outer parse-validate-reject loop would be
+needed, which is solvable but real wiring, not a config flag.
 
 ## Verification plan
 
