@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Release binaries (`checksums.txt`, covering every archive) are now keyless-signed with cosign,
+  same identity as the container image. Previously only the image was signed.
+- Bumped `cel-go` and `golang.org/x/mod` (both indirect) past disclosed vulnerabilities, and the
+  `go` toolchain directive past a vulnerable range that CI was actually building with.
+
+### Changed
+
+- Dockerfile's builder image bumped to `golang:1.27.1`, pinned by digest alongside the runtime
+  distroless base image.
+
 ## [0.1.0] - 2026-09-24
 
 First tagged release. Slices 1-9 of the delivery plan in `docs/design.md`: signal ingestion,

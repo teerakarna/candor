@@ -25,6 +25,22 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# Keyless-signs checksums.txt (same Fulcio/Rekor-via-OIDC pattern as the image, no stored key) -
+# every archive's hash is in there, so signing the one file covers all of them. Sigstore's current
+# bundle format (verification material + signature + cert in one file), not the deprecated
+# --output-signature/--output-certificate flags - verified against the installed cosign CLI's own
+# --help before writing this, since those flags no longer exist in current cosign.
+signs:
+  - cmd: cosign
+    signature: "${artifact}.bundle"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "--yes"
+      - "${artifact}"
+    artifacts: checksum
+    output: true
+
 changelog:
   sort: asc
   use: github
@@ -53,3 +69,15 @@ release:
     ```
 
     Helm chart: `oci://ghcr.io/teerakarna/charts/candor --version {{ .Version }}`
+
+    ## Verifying the binaries
+
+    `checksums.txt` is keyless-signed with cosign (same identity as the image above) - covers every
+    archive in this release, since they're all hashed in that one file. Verify with:
+
+    ```
+    cosign verify-blob --bundle checksums.txt.bundle \
+      --certificate-identity-regexp "^https://github.com/teerakarna/candor/" \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      checksums.txt
+    ```
