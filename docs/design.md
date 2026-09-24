@@ -180,11 +180,17 @@ What counts as a brake:
   internally consistent. `TestFindingReconciler_BudgetCostRegression` is the pattern: N genuinely
   distinct items against a ceiling of 2, asserting exactly 2 calls happen.
 
-**Where this stands today, honestly.** Every brake Candor has is on the *cost* path: the
-fingerprint gate, the budget ceiling, suppression. The *action* path has none, because until slice
-9 there are no actions. The circuit breakers listed under "What the original spec got right" (max
-disruption percentage, global rate limit, panic switch dropping to Audit mode) are **design intent,
-not implemented code**, as of 2026-09-12.
+**Where this stands today.** Slice 9 shipped (below), so the *action* path now has brakes too, not
+just the *cost* path (fingerprint gate, budget ceiling, suppression). `ProposePullRequest` is
+gated by a per-namespace budget (`internal/signal.CheckPullRequestBudget`), a cluster-wide budget
+that fails *closed* rather than open when no `OperatingPolicy` exists
+(`internal/signal.CheckGlobalPullRequestBudget`), and a panic switch checked before either budget
+is touched (`internal/signal.InAuditMode`) - all three proven under real volume by
+`TestFindingReconciler_ProposePullRequestCostRegression` and
+`TestFindingReconciler_ProposePullRequest_PanicSwitchMidRun_StopsSubsequentAttempts`. The
+`IsolateServiceTraffic` quarantine action and Enforcing mode remain design intent, not implemented
+code, as of this writing (2026-09-24) - see slice 9's own delivery note below for what did and
+didn't ship with it.
 
 **This binds slice 9 specifically.** `ProposePullRequest` is the first mechanism that writes
 anything outward. It does not ship without, in the same slice:
@@ -317,7 +323,22 @@ budget explicitly, or it is not a solution.
    paths are best-effort: a failure is logged and counted (`candor_webhook_sends_total`), never
    returned as an error - a flaky notification endpoint must not make Finding reconciliation or
    the digest loop get stuck.
-9. `ProposePullRequest` action against the GitOps repo.
+9. `ProposePullRequest` action against the GitOps repo. **Done.** Fires only when a fix is
+   independently, mechanically verifiable - a Trivy `VulnerabilityReport` where every vulnerability
+   agrees on one `fixedVersion` (`internal/gitops.ComputeFix`) - regardless of what the LLM
+   recommends; no such fix, no PR. Branch/commit/PR creation is idempotent
+   (`internal/gitops.GitHubOpener`, treats GitHub's "already exists" as success, not an error).
+   Shipped with all three brakes this rule requires in the same change: a per-namespace cap that
+   degrades to `Notify` on exhaustion, a cluster-wide cap via the new cluster-scoped
+   `OperatingPolicy` CRD that - unlike every other budget in Candor - fails *closed* when no
+   `OperatingPolicy` exists (there's nowhere to persist a count, so allowing anyway would be an
+   uncounted, unenforced brake), and a panic switch (`OperatingPolicy.spec.mode: Audit`) checked
+   before either budget is touched, reachable by editing a CRD with no redeploy. Order matters and
+   is enforced: the GitHub token Secret is validated before either budget is consumed, so a
+   misconfigured Secret can never burn budget for a PR that was never going to open. The controller
+   gains no cluster-wide Secret access for this - a namespace enabling it grants a namespaced Role
+   naming the one Secret explicitly (Trivy's config scan, KSV-0041, caught the cluster-wide version
+   of this before merge). Released as `v0.1.0`, the first tagged release.
 10. Second provider (webhook ingest) + second LLM backend — proves both interfaces actually abstract.
 11. Blog article.
 
