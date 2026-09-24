@@ -9,7 +9,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -48,7 +47,7 @@ func TestDigestRunnable_SendsOneDigestPerWebhookConfiguredPolicy(t *testing.T) {
 	}
 
 	policy := &candorv1alpha1.SignalPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: testPolicyName, Namespace: corev1.NamespaceDefault},
+		Name: testPolicyName, Namespace: corev1.NamespaceDefault,
 		Spec: candorv1alpha1.SignalPolicySpec{
 			Providers: []string{testProvider},
 			Webhook:   &candorv1alpha1.Webhook{URL: url},
@@ -88,8 +87,8 @@ func TestDigestRunnable_NoWebhookConfigured_NoDigestSent(t *testing.T) {
 		t.Fatal(err)
 	}
 	policy := &candorv1alpha1.SignalPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: testPolicyName, Namespace: corev1.NamespaceDefault},
-		Spec:       candorv1alpha1.SignalPolicySpec{Providers: []string{testProvider}},
+		Name: testPolicyName, Namespace: corev1.NamespaceDefault,
+		Spec: candorv1alpha1.SignalPolicySpec{Providers: []string{testProvider}},
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(policy).Build()
 	d := &DigestRunnable{Client: c, Interval: time.Hour}
