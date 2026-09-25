@@ -34,6 +34,14 @@ manager:
     # Health probe server port
     port: 8081
 
+  ## Generic webhook signal receiver (SignalPolicy.spec.webhookReceiver) - see
+  ## internal/provider/webhook. Set port to 0 to disable it (matches cmd/main.go's own
+  ## signal-receiver-port flag semantics).
+  ##
+  webhookReceiver:
+    # Webhook signal receiver port
+    port: 9444
+
   ## Environment variables
   ##
   env:
@@ -220,6 +228,9 @@ grafanaDashboard:
 
 ## Network policies for controlling traffic flow.
 ## Enable to restrict ingress to the controller manager.
+## Helm-only for now (issue #64) - config/network-policy/ exists but isn't wired into
+## config/default/kustomization.yaml, so a plain `kubectl apply -k config/default` install gets no
+## NetworkPolicy regardless of this setting.
 ##
 networkPolicy:
   enabled: false

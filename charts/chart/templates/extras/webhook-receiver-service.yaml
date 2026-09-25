@@ -1,4 +1,19 @@
+{{- /*
+The manager.enabled half of this condition matches the Deployment's own guard in manager.yaml
+verbatim (re-apply together if either ever changes - see CONTRIBUTING.md's regeneration
+checklist). $whPort is resolved (and validated) only inside this guard, not unconditionally above
+it: an invalid manager.webhookReceiver.port must not fail an unrelated `manager.enabled=false`
+deploy that would never have rendered this Service - or referenced that value - at all.
+*/}}
 {{- if or (not (hasKey .Values.manager "enabled")) (.Values.manager.enabled) }}
+{{- $whPort := include "candor.webhookReceiverPort" . | int }}
+{{- /*
+The enabled check below is deliberately unique to this Service, not a drift from the Deployment's
+own guard above: the Deployment always renders regardless of whether the webhook port is enabled,
+since only one containerPort entry - not the whole resource - depends on it, but a Service with
+no live target port shouldn't exist at all.
+*/}}
+{{- if (include "candor.portEnabled" $whPort) }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -13,10 +28,11 @@ metadata:
 spec:
   ports:
   - name: webhook-signal
-    port: 9444
+    port: {{ $whPort }}
     protocol: TCP
-    targetPort: 9444
+    targetPort: {{ $whPort }}
   selector:
     app.kubernetes.io/name: {{ include "candor.name" . }}
     control-plane: controller-manager
+{{- end }}
 {{- end }}

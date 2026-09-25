@@ -248,6 +248,47 @@ goes through the same new `ResolveSecretKey` helper but has no equivalent cache,
 suffers the identical uncached-apiserver-round-trip regression, reachable indirectly through
 Finding churn rather than directly through HTTP requests (#67).
 
+- `internal/signal.Ingest`'s outbound `Spec.Webhook` notification no longer blocks `Ingest`'s
+  return (#63) - it's queued onto a new shared, bounded pool (`internal/notify.SendAsync`) instead
+  of sent inline. This mattered once the webhook signal receiver started calling `Ingest`
+  synchronously from an HTTP handler: a slow or unreachable notification endpoint held up the
+  response to whoever POSTed the original signal, for a side effect they never observe anyway.
+  `internal/controller.DigestRunnable`'s per-tick digests share the same pool and get the identical
+  fix - a slow policy's digest no longer delays every other policy's send in the same tick.
+
+  The pool is a fixed 8 workers backed by a 256-slot queue; once full, a send is dropped and
+  counted (`WebhookSendsTotal`'s new `dropped` result) rather than growing unbounded or blocking
+  the caller. Both the send itself and the caller's own `done` callback run behind independent
+  panic recovery on every path, including the queue-full one - these are long-lived background
+  goroutines with none of the per-request/per-reconcile recovery every other code path here already
+  gets, so an unrecovered panic anywhere in this pool would otherwise crash the whole
+  controller-manager process for one dropped notification.
+
+  Two accepted trade-offs: notifications about the same Finding sent close together (a rapid
+  create-then-resolve) can now arrive out of order downstream, since they may land on different
+  workers whose independent HTTP round trips finish in either order; and `Ingest`'s per-Finding
+  notifications share one budget with `DigestRunnable`'s digests, so a handful of policies with
+  slow/unreachable webhooks can, under a large enough simultaneous burst, cause unrelated
+  notifications to be dropped rather than merely delayed.
+- The webhook signal receiver's port (9444) is now templated through one Helm value
+  (`manager.webhookReceiver.port`, resolved and validated by `candor.webhookReceiverPort` and
+  `candor.validatedPort` in their own template file) instead of hand-duplicated across the
+  container port, the Service, and the NetworkPolicy allow-rule - the same drift class already
+  found once for this feature (a missing Service entirely). Setting it to `0` disables all three
+  together, matching `cmd/main.go`'s own `signal-receiver-port > 0` flag semantics exactly
+  (a negative value is treated as disabled too, not just `0`). Non-integer values, octal-looking
+  leading zeros, and values too large for an `int` all fail chart rendering with a clear message
+  instead of Sprig's own casts silently coercing them to `0` and disabling the feature with no
+  warning; the same validator now also covers `manager.healthProbe.port` and `metrics.port`, the
+  two ports this one is checked against for collisions, closing the same gap on their side of that
+  check. Validation only runs when the port in question is actually used - skipped entirely under
+  `manager.enabled=false` or `networkPolicy.enabled=false`, for instance - so a stale invalid value
+  never blocks an unrelated deploy. The metrics Service/NetworkPolicy's own separate uses of
+  `metrics.port` remain unvalidated, a pre-existing gap in files this change doesn't otherwise
+  touch. The kustomize distribution's own literals are left hand-duplicated, matching every other
+  port in that distribution - fixing that gap (e.g. via kustomize's `replacements`) is a separate,
+  larger decision tracked loosely alongside #64's own kustomize/Helm parity gap.
+
 ### Security
 
 - The webhook signal receiver above fails closed: no `webhookReceiver` configured means that

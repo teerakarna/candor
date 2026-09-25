@@ -62,6 +62,9 @@ func TestDigestRunnable_SendsOneDigestPerWebhookConfiguredPolicy(t *testing.T) {
 
 	d.sendDigests(context.Background())
 
+	// A real, bounded wait, not a non-blocking check: sendDigests now queues its send onto
+	// internal/notify's shared async worker pool (issue #63) rather than sending inline, so the
+	// digest can genuinely still be in flight for a moment after sendDigests itself returns.
 	select {
 	case digest := <-received:
 		if digest.Namespace != corev1.NamespaceDefault {
@@ -76,8 +79,8 @@ func TestDigestRunnable_SendsOneDigestPerWebhookConfiguredPolicy(t *testing.T) {
 		if digest.WindowSeconds != int64(time.Hour.Seconds()) {
 			t.Errorf("WindowSeconds = %d, want %d", digest.WindowSeconds, int64(time.Hour.Seconds()))
 		}
-	default:
-		t.Fatal("expected a digest")
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for a digest")
 	}
 }
 

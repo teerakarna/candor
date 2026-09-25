@@ -73,9 +73,42 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
+      {{- $whPort := include "candor.webhookReceiverPort" . | int }}
+      {{- $healthPort := include "candor.validatedPort" (dict "value" .Values.manager.healthProbe.port "name" "manager.healthProbe.port") | int }}
+      {{- /*
+      candor.validatedPort only rejects non-integer shapes (octal-looking, overflowing, etc.) - it
+      deliberately still accepts a negative value, since that's a meaningful, valid input for
+      manager.webhookReceiver.port specifically (see its own doc comment: "disabled", same as 0).
+      healthProbe.port and metrics.port have no such meaning for a negative value - it's always
+      invalid for them - so each gets its own explicit check here instead.
+      */}}
+      {{- if le $healthPort 0 }}
+      {{- fail (printf "manager.healthProbe.port must be a positive integer, got %d" $healthPort) }}
+      {{- end }}
+      {{- if and (include "candor.portEnabled" $whPort) (eq $whPort $healthPort) }}
+      {{- fail (printf "manager.webhookReceiver.port (%d) must not equal manager.healthProbe.port (%d)" $whPort $healthPort) }}
+      {{- end }}
+      {{- /*
+      $metricsPort is only resolved (and validated) when metrics is actually enabled, not
+      unconditionally above - an invalid metrics.port left over from when metrics was last enabled
+      must not fail a deploy that has since turned metrics off and no longer references it at all.
+      */}}
+      {{- $metricsPort := 0 }}
+      {{- if .Values.metrics.enabled }}
+      {{- $metricsPort = include "candor.validatedPort" (dict "value" .Values.metrics.port "name" "metrics.port") | int }}
+      {{- if le $metricsPort 0 }}
+      {{- fail (printf "metrics.port must be a positive integer, got %d" $metricsPort) }}
+      {{- end }}
+      {{- if and (include "candor.portEnabled" $whPort) (eq $whPort $metricsPort) }}
+      {{- fail (printf "manager.webhookReceiver.port (%d) must not equal metrics.port (%d)" $whPort $metricsPort) }}
+      {{- end }}
+      {{- end }}
+      {{- /* values.yaml's webhook.port (9443, the admission-webhook server) isn't wired into any
+      containerPort yet, so no collision check against it is needed - add one here if that ever
+      changes. */}}
       - args:
         {{- if .Values.metrics.enabled }}
-        - --metrics-bind-address=:{{ .Values.metrics.port }}
+        - --metrics-bind-address=:{{ $metricsPort }}
         {{- if not .Values.metrics.secure }}
         - --metrics-secure=false
         {{- end }}
@@ -83,7 +116,8 @@ spec:
         # Bind to :0 to disable the controller-runtime managed metrics server
         - --metrics-bind-address=0
         {{- end }}
-        - --health-probe-bind-address=:{{ .Values.manager.healthProbe.port }}
+        - --health-probe-bind-address=:{{ $healthPort }}
+        - --signal-receiver-port={{ $whPort }}
         {{- range .Values.manager.args }}
         - {{ tpl . $ }}
         {{- end }}
@@ -110,21 +144,23 @@ spec:
         livenessProbe:
           httpGet:
             path: /healthz
-            port: {{ .Values.manager.healthProbe.port }}
+            port: {{ $healthPort }}
           initialDelaySeconds: 15
           periodSeconds: 20
         name: manager
         ports:
-        - containerPort: {{ .Values.manager.healthProbe.port }}
+        - containerPort: {{ $healthPort }}
           name: health
           protocol: TCP
-        - containerPort: 9444
+        {{- if (include "candor.portEnabled" $whPort) }}
+        - containerPort: {{ $whPort }}
           name: webhook-signal
           protocol: TCP
+        {{- end }}
         readinessProbe:
           httpGet:
             path: /readyz
-            port: {{ .Values.manager.healthProbe.port }}
+            port: {{ $healthPort }}
           initialDelaySeconds: 5
           periodSeconds: 10
         resources:

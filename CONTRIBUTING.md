@@ -19,7 +19,9 @@ fingerprinting/budget model are still settling.
 - After a CRD or RBAC change, regenerate the Helm chart:
   `kubebuilder edit --plugins=helm/v2-alpha --output-dir=charts --force`. This **will** revert
   hand-maintained things back to their generated defaults — re-apply them every time:
-  - `charts/chart/values.yaml`: `manager.image.repository` back to `ghcr.io/teerakarna/candor`
+  - `charts/chart/values.yaml`: `manager.image.repository` back to `ghcr.io/teerakarna/candor`,
+    and `manager.webhookReceiver.port` (the plugin doesn't know this key at all, so it's dropped
+    entirely, not reset to a default - re-add the whole `webhookReceiver: { port: 9444 }` block)
   - `charts/chart/.helmignore`: the `dist/chart/*.tgz` line back to `*.tgz`
   - `.github/workflows/test-chart.yml`: triggers back to `branches: [main]`, the
     `helm lint` path back to `./charts/chart`, **and its pinned action versions** - the plugin's
@@ -41,7 +43,17 @@ fingerprinting/budget model are still settling.
     match the Deployment's own enablement condition) is silently dropped too. Discovered
     2026-09-25 (the same webhook receiver work): `helm template --set manager.enabled=false`
     still rendered the new Service with a selector matching no pods. Re-apply the guard and
-    re-check with that same command after every regeneration.
+    re-check with that same command after every regeneration. Its `port`/`targetPort` templating
+    (`{{ include "candor.webhookReceiverPort" . }}`, not a bare literal) is dropped the same way -
+    re-apply alongside the guard.
+  - `charts/chart/templates/manager/manager.yaml` itself is also wholesale-regenerated (it's
+    derived from `config/manager/manager.yaml`, not a template the plugin leaves alone) - every
+    hand-added line needs re-applying: the `$whPort`/`$healthPort`/`$metricsPort` resolution block
+    at the top of the `containers:` list, the two port-collision `fail` checks, the
+    `--signal-receiver-port` arg, and the conditional `webhook-signal` `containerPort` entry.
+    `charts/chart/templates/_webhookreceiver-helpers.tpl` (a plain custom file the plugin has
+    never heard of, unlike `_helpers.tpl`) is untouched by regeneration and doesn't need
+    re-applying - only its call sites in the regenerated files do.
   Verify with `helm lint charts/chart` and `helm template test charts/chart | grep image:` after.
 
 ## Design constraints that PRs must respect

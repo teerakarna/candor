@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus/testutil"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -66,6 +67,41 @@ func webhookServer(t *testing.T) (url string, received chan notify.Event) {
 	t.Cleanup(server.Close)
 	return server.URL, received
 }
+
+// waitForNotification blocks until an Event arrives on received or notifyWait elapses. Needed
+// because notifyEvent (internal/signal/ingest.go) fires asynchronously in its own goroutine, not
+// synchronously inside Ingest (issue #63) - a non-blocking check right after Ingest returns would
+// race the goroutine rather than actually waiting for it.
+func waitForNotification(t *testing.T, received chan notify.Event) notify.Event {
+	t.Helper()
+	select {
+	case event := <-received:
+		return event
+	case <-time.After(notifyWait):
+		t.Fatal("timed out waiting for a webhook notification")
+		return notify.Event{}
+	}
+}
+
+// assertNoNotification waits notifyWait for an Event that must never arrive. Like
+// waitForNotification, this is a real wait, not a non-blocking check - the notification goroutine
+// needs a chance to run at all before its absence means anything.
+func assertNoNotification(t *testing.T, received chan notify.Event) {
+	t.Helper()
+	select {
+	case event := <-received:
+		t.Fatalf("expected no notification, got %+v", event)
+	case <-time.After(notifyWait):
+	}
+}
+
+// notifyWait bounds how long a test waits for (or, in assertNoNotification's case, waits out) the
+// async notification goroutine, dispatched via internal/notify's own shared worker pool
+// (SendAsync). Generous relative to how long a real send actually takes - webhookServer's own
+// httptest.Server responds near-instantly - specifically to stay clear of scheduling delay under
+// -race or a loaded CI runner, where a shorter value risked a spurious "timed out" failure on an
+// otherwise-correct send that simply hadn't been scheduled yet.
+const notifyWait = 2 * time.Second
 
 func policyWithWebhook(providers []string, webhookURL string) *candorv1alpha1.SignalPolicy {
 	p := policy("policy", providers, SeverityHigh)
@@ -461,13 +497,9 @@ func TestIngest_Creates_NotifiesWebhook(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	select {
-	case event := <-received:
-		if event.Kind != notify.KindFindingCreated || event.Severity != SeverityCritical {
-			t.Errorf("event = %+v, want Kind=%q Severity=%q", event, notify.KindFindingCreated, SeverityCritical)
-		}
-	default:
-		t.Fatal("expected a FindingCreated notification")
+	event := waitForNotification(t, received)
+	if event.Kind != notify.KindFindingCreated || event.Severity != SeverityCritical {
+		t.Errorf("event = %+v, want Kind=%q Severity=%q", event, notify.KindFindingCreated, SeverityCritical)
 	}
 }
 
@@ -480,18 +512,14 @@ func TestIngest_UpdatedWithoutOutcomeChange_NoNotification(t *testing.T) {
 	if _, err := Ingest(ctx, c, scheme, sig, nil); err != nil {
 		t.Fatal(err)
 	}
-	<-received // drain the FindingCreated notification from the first ingest
+	waitForNotification(t, received) // drain the FindingCreated notification from the first ingest
 
 	sig.Summary = "updated summary, same severity"
 	if _, err := Ingest(ctx, c, scheme, sig, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	select {
-	case event := <-received:
-		t.Fatalf("expected no notification for a routine content update, got %+v", event)
-	default:
-	}
+	assertNoNotification(t, received)
 }
 
 func TestIngest_Resolved_NotifiesWebhook(t *testing.T) {
@@ -502,19 +530,15 @@ func TestIngest_Resolved_NotifiesWebhook(t *testing.T) {
 	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityCritical), nil); err != nil {
 		t.Fatal(err)
 	}
-	<-received // drain FindingCreated
+	waitForNotification(t, received) // drain FindingCreated
 
 	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityLow), nil); err != nil {
 		t.Fatal(err)
 	}
 
-	select {
-	case event := <-received:
-		if event.Kind != notify.KindFindingResolved {
-			t.Errorf("event.Kind = %q, want %q", event.Kind, notify.KindFindingResolved)
-		}
-	default:
-		t.Fatal("expected a FindingResolved notification")
+	event := waitForNotification(t, received)
+	if event.Kind != notify.KindFindingResolved {
+		t.Errorf("event.Kind = %q, want %q", event.Kind, notify.KindFindingResolved)
 	}
 }
 
@@ -526,23 +550,19 @@ func TestIngest_Recurred_NotifiesWebhook(t *testing.T) {
 	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityCritical), nil); err != nil {
 		t.Fatal(err)
 	}
-	<-received // drain FindingCreated
+	waitForNotification(t, received) // drain FindingCreated
 	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityLow), nil); err != nil {
 		t.Fatal(err)
 	}
-	<-received // drain FindingResolved
+	waitForNotification(t, received) // drain FindingResolved
 
 	if _, err := Ingest(ctx, c, scheme, testSignal(SeverityCritical), nil); err != nil {
 		t.Fatal(err)
 	}
 
-	select {
-	case event := <-received:
-		if event.Kind != notify.KindFindingRecurred {
-			t.Errorf("event.Kind = %q, want %q", event.Kind, notify.KindFindingRecurred)
-		}
-	default:
-		t.Fatal("expected a FindingRecurred notification")
+	event := waitForNotification(t, received)
+	if event.Kind != notify.KindFindingRecurred {
+		t.Errorf("event.Kind = %q, want %q", event.Kind, notify.KindFindingRecurred)
 	}
 }
 

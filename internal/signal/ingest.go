@@ -216,17 +216,35 @@ func webhookFor(policies []candorv1alpha1.SignalPolicy, provider string) *candor
 
 // notifyEvent sends a Finding notification best-effort: a failure is logged and counted, never
 // returned as an error - a broken webhook endpoint must not make Finding reconciliation fail.
+//
+// Queued onto notify's shared async worker pool, not sent inline (issue #63): the caller that
+// triggered this Ingest - an HTTP request for the webhook signal receiver, a reconcile for
+// Trivy's - must never wait on a slow or unreachable notification endpoint for a side effect
+// whose outcome it never observes anyway, most consequential for the webhook receiver
+// specifically, where that caller is the sender's own HTTP request. SendAsync's own bounded pool
+// (shared with internal/controller.DigestRunnable's digest sends) caps how many of these can run
+// concurrently across the whole process, rather than this spawning an unbounded goroutine per
+// notification the way a bare `go func()` here would.
 func notifyEvent(ctx context.Context, url, kind string, f *candorv1alpha1.Finding) {
+	log := logf.FromContext(ctx)
+	name := f.Name
 	event := notify.Event{
-		Kind: kind, Namespace: f.Namespace, Finding: f.Name,
+		Kind: kind, Namespace: f.Namespace, Finding: name,
 		Severity: f.Spec.Severity, Summary: f.Spec.Summary,
 	}
-	if err := notify.Send(ctx, url, event); err != nil {
-		metrics.WebhookSendsTotal.WithLabelValues("error").Inc()
-		logf.FromContext(ctx).Error(err, "sending webhook notification", "kind", kind, "finding", f.Name)
-		return
-	}
-	metrics.WebhookSendsTotal.WithLabelValues("success").Inc()
+	notify.SendAsync(url, event, func(err error, dropped bool) {
+		if dropped {
+			metrics.WebhookSendsTotal.WithLabelValues("dropped").Inc()
+			log.Info("dropping webhook notification - too many already queued", "kind", kind, "finding", name)
+			return
+		}
+		if err != nil {
+			metrics.WebhookSendsTotal.WithLabelValues("error").Inc()
+			log.Error(err, "sending webhook notification", "kind", kind, "finding", name)
+			return
+		}
+		metrics.WebhookSendsTotal.WithLabelValues("success").Inc()
+	})
 }
 
 // anyPolicyAccepts reports whether at least one SignalPolicy enables sig.Provider at a

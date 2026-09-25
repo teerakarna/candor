@@ -434,3 +434,60 @@ func TestReceiver_SamePayloadIDDifferentPolicies_DoNotCollide(t *testing.T) {
 		t.Fatalf("got %d findings, want 2 - the same sender-supplied id from two different policies must not collide into one Finding", len(findings.Items))
 	}
 }
+
+// TestReceiver_SlowOutboundWebhook_DoesNotBlockResponse is the regression test for issue #63:
+// internal/signal.Ingest used to send a policy's own outbound Spec.Webhook notification (a
+// completely separate concept from this policy's inbound WebhookReceiver) synchronously before
+// returning, so a slow or unreachable notification endpoint held up the HTTP response to whoever
+// POSTed the original signal - a caller that never even observes that notification's outcome.
+func TestReceiver_SlowOutboundWebhook_DoesNotBlockResponse(t *testing.T) {
+	// The outbound notification handler blocks on release, held open indefinitely rather than for
+	// a fixed sleep - the assertion below only needs the response to return before this handler
+	// ever completes, not before some specific duration elapses, so there's no delay value to
+	// tune. release is closed explicitly, further down, before this function returns - not via
+	// defer: defers run LIFO, so a deferred close(release) registered before the deferred
+	// slowNotify.Close() below would run AFTER it, and Close() itself blocks until every
+	// outstanding request on the server completes - exactly the request this handler is still
+	// holding open on <-release, deadlocking the whole test.
+	release := make(chan struct{})
+	notifyReached := make(chan struct{}, 1)
+	slowNotify := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		notifyReached <- struct{}{}
+		<-release
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer slowNotify.Close()
+
+	policy := withWebhookReceiver()
+	policy.Spec.Webhook = &candorv1alpha1.Webhook{URL: slowNotify.URL}
+	r := newTestReceiver(t, policy, testSecret())
+
+	body := []byte(validBody)
+	start := time.Now()
+	rec := doRequest(t, r, testPolicyName, body, sign([]byte(testHMACKey), body))
+	elapsed := time.Since(start)
+
+	// Unblocked unconditionally, before any assertion that could call t.Fatal: a Fatal here would
+	// still run the deferred slowNotify.Close() (t.Fatal uses runtime.Goexit, not a panic that
+	// skips deferred calls), which would deadlock exactly as described above if release were
+	// still open when it ran.
+	close(release)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d, body: %s", rec.Code, http.StatusAccepted, rec.Body.String())
+	}
+	// 1s, not a tighter bound: the outbound notification handler is held open indefinitely (not
+	// for some short fixed delay), so this only needs enough headroom to absorb ordinary -race/CI
+	// scheduling delay without becoming a flake source, matching the slack this package's other
+	// timing-sensitive tests already use for the same reason.
+	const wantUnder = 1 * time.Second
+	if elapsed >= wantUnder {
+		t.Errorf("handler took %v to respond, want well under %v - the outbound notification handler was still blocked at that point, so the response must not have waited on it at all", elapsed, wantUnder)
+	}
+
+	select {
+	case <-notifyReached:
+	case <-time.After(2 * time.Second):
+		t.Error("outbound notification endpoint was never reached - the async send may not have fired at all")
+	}
+}
