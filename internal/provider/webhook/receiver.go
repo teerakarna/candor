@@ -46,7 +46,6 @@ import (
 	"strings"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -117,6 +116,11 @@ type Receiver struct {
 	Scheme *runtime.Scheme
 	// Addr the HTTP server listens on, e.g. ":9444".
 	Addr string
+
+	// hmacKeys caches resolved WebhookReceiver Secret data for hmacKeyCacheTTL - see its own doc
+	// comment for why. Unexported and zero-value-ready: nothing outside this package constructs
+	// or overrides it.
+	hmacKeys hmacKeyCache
 }
 
 var (
@@ -212,13 +216,25 @@ func (r *Receiver) Start(ctx context.Context) error {
 // with the body read done immediately, this deadline is never in a race with apiserver latency.
 const readTimeout = 15 * time.Second
 
-// handlerTimeout bounds every apiserver call this handler makes (SignalPolicy Get, Secret Get,
-// Ingest's own List/Get/Update calls), now that the body read (bounded separately by readTimeout,
-// above) happens first and no longer shares a budget with them - the exact bug this package's own
-// CHANGELOG entry describes (a Secret Get blocking forever with no timeout) had no backstop
-// before this; this is that backstop for every other way an apiserver call on this path could
-// stall.
+// handlerTimeout bounds every apiserver call this handler makes directly on its own request's
+// context (SignalPolicy Get, Ingest's own List/Get/Update calls), now that the body read (bounded
+// separately by readTimeout, above) happens first and no longer shares a budget with them - the
+// exact bug this package's own CHANGELOG entry describes (a Secret Get blocking forever with no
+// timeout) had no backstop before this; this is that backstop for every other way an apiserver
+// call on this path could stall. The Secret resolve on a cache miss deliberately does NOT share
+// this budget - see secretResolveTimeout.
 const handlerTimeout = 10 * time.Second
+
+// secretResolveTimeout bounds the Secret Get a cache miss in hmacKeyCache triggers - deliberately
+// independent of any one request's own remaining handlerTimeout budget, not a derived fraction of
+// it. Singleflight coalesces concurrent misses onto whichever request happens to become the
+// leader (see hmacKeyCache's doc comment); tying this to that leader's own remaining time would
+// make every other request coalesced onto it fail or succeed based on how much budget a
+// completely unrelated request happened to have left, rather than on its own. A fixed, modest
+// timeout dedicated to this one apiserver round trip avoids that, while still leaving headroom
+// under the http.Server's own WriteTimeout even in the worst case where the SignalPolicy Get
+// above consumed nearly all of handlerTimeout first.
+const secretResolveTimeout = 5 * time.Second
 
 func (r *Receiver) handle(w http.ResponseWriter, req *http.Request) {
 	log := logf.FromContext(req.Context())
@@ -284,20 +300,32 @@ func (r *Receiver) handle(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	secret := &corev1.Secret{}
 	secretKey := client.ObjectKey{Namespace: namespace, Name: policy.Spec.WebhookReceiver.SecretRef.Name}
+	// Cached (with concurrent-miss coalescing - see hmacKeyCache's doc comment) rather than
+	// resolved against the apiserver on every request: bounds the apiserver load a flood of POSTs
+	// against this route can generate, including ones that will fail signature verification below
+	// regardless (the Secret still has to be read first).
+	//
 	// A misconfigured secret (missing, wrong key) and an actually-wrong signature both surface as
 	// the same 401 response - deliberately not distinguishing "your signature is wrong" from "the
 	// operator's own secret is broken", for the same enumeration-avoidance reasoning as above. The
-	// real cause is still logged server-side.
-	if err := r.Get(ctx, secretKey, secret); err != nil {
-		log.Error(err, "getting WebhookReceiver secret", "secret", secretKey)
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	hmacKey := secret.Data["secret"]
-	if len(hmacKey) == 0 {
-		log.Error(fmt.Errorf("secret %s has no data key %q", secretKey, "secret"), "misconfigured WebhookReceiver secret")
+	// real cause is still logged server-side. A misconfigured secret is also never cached, so a
+	// fix takes effect on the very next request rather than waiting out the TTL.
+	hmacKey, err := r.hmacKeys.getOrResolve(ctx, secretKey, func() ([]byte, error) {
+		// A context of its own, bound by secretResolveTimeout - not this request's ctx, and not
+		// derived from it either. Singleflight runs this closure at most once per set of
+		// concurrent misses and shares its result (success or failure) with every caller waiting
+		// on it (see hmacKeyCache's doc comment): whichever request happens to become the leader
+		// here is arbitrary, so tying this call's deadline to that one request's own remaining
+		// budget would make every other coalesced request's outcome depend on a completely
+		// unrelated request's timeline rather than its own - see secretResolveTimeout's own doc
+		// comment for the full reasoning.
+		resolveCtx, cancel := context.WithTimeout(context.Background(), secretResolveTimeout)
+		defer cancel()
+		return signal.ResolveSecretKey(resolveCtx, r.Client, secretKey, "secret")
+	})
+	if err != nil {
+		log.Error(err, "resolving WebhookReceiver secret", "secret", secretKey)
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}

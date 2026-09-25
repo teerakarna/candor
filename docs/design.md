@@ -380,9 +380,20 @@ budget explicitly, or it is not a solution.
     don't simulate caching or RBAC, and envtest's default client bypasses RBAC entirely. Fixed via
     `Client.Cache.DisableFor` on the manager (`cmd/main.go`), verified against a live Kind cluster:
     before the fix, a real signed webhook request timed out completely; after, it returned 202 and
-    created a Finding correctly. Automated coverage for this specific class of bug is tracked
-    separately (#58) rather than bundled here, since it needs RBAC-scoped test infrastructure the
-    current suite doesn't have.
+    created a Finding correctly. Automated coverage for this specific class of bug was tracked
+    separately (#58) rather than bundled here, since it needed RBAC-scoped test infrastructure the
+    suite at the time didn't have - since landed: `cmd/main_test.go` impersonates a real
+    RBAC-restricted identity against a real envtest control plane (`rest.ImpersonationConfig`, not
+    a fake client or the suite's own admin config) and proves the exact configuration `cmd/main.go`
+    ships either succeeds or reproduces the original hang, depending on whether `Client.Cache.
+    DisableFor` is set. Disabling the cache also turned every request's Secret `Get` into an
+    uncached, direct apiserver round trip - including ones that fail signature verification
+    regardless, since the Secret has to be read before a signature can be checked. Tracked
+    separately (#60) as a DoS-hardening gap rather than blocking this PR on it, and since landed: a
+    20s in-process, TTL-invalidated cache of resolved HMAC keys (not watch-invalidated - a watch
+    would need back the exact cluster-wide Secret permission disabling the cache was meant to avoid
+    needing). A misconfigured or missing Secret is deliberately never cached, so fixing it takes
+    effect on the next request rather than waiting out the TTL.
 
     **A single `/code-review high` pass before opening the PR found five more real issues, none
     caught by the test suite that existed at that point** (candor's own new `CLAUDE.md`, written
@@ -406,7 +417,10 @@ budget explicitly, or it is not a solution.
     wasteful re-List where a targeted Get was already possible; a missing log line on one specific
     apiserver-Get failure path; and a hardcoded error-message string that could drift from the
     constants it was describing. All six fixed, two lower-severity findings deliberately deferred
-    (#61, #62) with reasoning recorded on each issue rather than bundled in. **A third pass found
+    (#61, #62) with reasoning recorded on each issue rather than bundled in. A further
+    lower-severity finding across these passes, deduplicating the Secret resolve-and-validate logic
+    this receiver and `GitOpsRepo` each carried their own copy of, was also deferred (#59) and has
+    since landed as `internal/signal.ResolveSecretKey`, used by both. **A third pass found
     the deepest one yet**: `RestrictToPolicy` correctly scoped *authentication*, but the resolve
     path still used that same narrowed view to decide whether an existing Finding should close -
     since `findingName` has no policy component, a Finding is namespace-wide, and a sibling

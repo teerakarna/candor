@@ -54,7 +54,10 @@ func sign(key, body []byte) string {
 	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
 
-func newTestReceiver(t *testing.T, objs ...client.Object) *Receiver {
+// newTestFakeClient builds the scheme and fake client shared by every test Receiver in this
+// package - newTestReceiver below, and newCountingTestReceiver in hmackeycache_test.go, which
+// wraps this same client in an interceptor rather than duplicating its construction.
+func newTestFakeClient(t *testing.T, objs ...client.Object) (client.WithWatch, *runtime.Scheme) {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	if err := candorv1alpha1.AddToScheme(scheme); err != nil {
@@ -64,6 +67,12 @@ func newTestReceiver(t *testing.T, objs ...client.Object) *Receiver {
 		t.Fatal(err)
 	}
 	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&candorv1alpha1.Finding{}).WithObjects(objs...).Build()
+	return c, scheme
+}
+
+func newTestReceiver(t *testing.T, objs ...client.Object) *Receiver {
+	t.Helper()
+	c, scheme := newTestFakeClient(t, objs...)
 	return &Receiver{Client: c, Scheme: scheme}
 }
 
