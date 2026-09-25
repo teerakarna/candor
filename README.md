@@ -313,7 +313,11 @@ kubectl apply -f https://github.com/teerakarna/candor/releases/download/<tag>/in
 ```
 
 Both install paths are produced by the same release pipeline — nothing hand-built or committed to
-`main`, so what you install is always a specific, versioned, signed release.
+`main`, so what you install is always a specific, versioned, signed release. One content
+difference: NetworkPolicy support is currently Helm-only (`--set networkPolicy.enabled=true`), since
+`config/network-policy/` isn't wired into `config/default/kustomization.yaml` yet (tracked as
+[#64](https://github.com/teerakarna/candor/issues/64)), so a `kubectl apply -f install.yaml` install
+gets no NetworkPolicy at all.
 
 ## Building from source (contributors)
 

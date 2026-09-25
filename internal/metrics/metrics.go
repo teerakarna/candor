@@ -68,13 +68,14 @@ var (
 		Help: "Total verification outcome transitions recorded while ingesting signals, by outcome (still_present|resolved|recurred) and severity.",
 	}, []string{"outcome", "severity"})
 
-	// WebhookSendsTotal counts every internal/notify.Send call, by result. Covers both immediate
-	// Finding notifications (internal/signal.Ingest) and the periodic digest
-	// (internal/controller.DigestRunnable) - Send never blocks either caller on failure, so this
-	// is how a broken webhook endpoint becomes visible instead of silently swallowed.
+	// WebhookSendsTotal counts every internal/notify.SendAsync call, by result. Covers both
+	// immediate Finding notifications (internal/signal.Ingest) and the periodic digest
+	// (internal/controller.DigestRunnable) - neither caller ever blocks on a send, so this is how
+	// a broken webhook endpoint (or a notification dropped for arriving too fast for the shared
+	// worker pool to keep up - "dropped") becomes visible instead of silently swallowed.
 	WebhookSendsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "candor_webhook_sends_total",
-		Help: "Total webhook notification/digest sends, by result (success|error).",
+		Help: "Total webhook notification/digest sends, by result (success|error|dropped).",
 	}, []string{labelResult})
 
 	// WebhookReceiverUp is 1 while internal/provider/webhook.Receiver's HTTP server is running, 0

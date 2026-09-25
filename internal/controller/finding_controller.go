@@ -211,8 +211,10 @@ func (r *FindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 // tryProposePullRequest attempts ProposePullRequest for finding's top hypothesis. It is a no-op -
-// silently degrading to Notify, which already happened for this Finding via internal/signal.Ingest
-// - whenever any precondition isn't met: GitOps isn't wired up, policy has no GitOpsRepo, the top
+// silently degrading to Notify, which internal/signal.Ingest already queued for this Finding onto
+// notify's shared async pool (best-effort - it may still be in flight, or dropped if that pool was
+// saturated, not a guaranteed-delivered fact) - whenever any precondition isn't met: GitOps isn't
+// wired up, policy has no GitOpsRepo, the top
 // hypothesis didn't recommend it, this exact fingerprint was already attempted, the OperatingPolicy
 // panic switch is in Audit mode (docs/design.md:189, checked first and before either budget is
 // touched, so it's a genuine full stop), no concrete fix can be mechanically derived
