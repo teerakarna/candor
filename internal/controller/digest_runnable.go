@@ -91,12 +91,24 @@ func (d *DigestRunnable) sendDigests(ctx context.Context) {
 		}
 
 		digest := buildDigest(p.Namespace, d.Interval, findings.Items)
-		if err := notify.Send(ctx, p.Spec.Webhook.URL, digest); err != nil {
-			metrics.WebhookSendsTotal.WithLabelValues("error").Inc()
-			log.Error(err, "sending digest", "namespace", p.Namespace, "signalpolicy", p.Name)
-			continue
-		}
-		metrics.WebhookSendsTotal.WithLabelValues("success").Inc()
+		namespace, policyName := p.Namespace, p.Name
+		// Queued, not sent inline: a slow or unreachable webhook for one policy must not delay
+		// every other policy's digest in this same tick, nor the ticker's own next fire (Start's
+		// select loop calls sendDigests synchronously) - the same reasoning internal/signal.Ingest's
+		// own notifyEvent documents for issue #63, sharing the same bounded worker pool.
+		notify.SendAsync(p.Spec.Webhook.URL, digest, func(err error, dropped bool) {
+			if dropped {
+				metrics.WebhookSendsTotal.WithLabelValues("dropped").Inc()
+				log.Info("dropping digest - too many notifications already queued", "namespace", namespace, "signalpolicy", policyName)
+				return
+			}
+			if err != nil {
+				metrics.WebhookSendsTotal.WithLabelValues("error").Inc()
+				log.Error(err, "sending digest", "namespace", namespace, "signalpolicy", policyName)
+				return
+			}
+			metrics.WebhookSendsTotal.WithLabelValues("success").Inc()
+		})
 	}
 }
 

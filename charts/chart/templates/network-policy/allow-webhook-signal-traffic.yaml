@@ -1,4 +1,12 @@
+{{- /*
+$whPort is resolved (and validated) only inside the networkPolicy.enabled guard, not
+unconditionally above it: an invalid manager.webhookReceiver.port must not fail an unrelated
+`networkPolicy.enabled=false` deploy that would never have rendered this rule - or referenced that
+value - at all.
+*/}}
 {{- if .Values.networkPolicy.enabled }}
+{{- $whPort := include "candor.webhookReceiverPort" . | int }}
+{{- if (include "candor.portEnabled" $whPort) }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -19,6 +27,7 @@ spec:
     # the receiver is meant to be reachable by external tools (SonarQube, Falco, etc.), and its
     # real access control is the per-SignalPolicy HMAC signature, not network segmentation.
     - ports:
-        - port: 9444
+        - port: {{ $whPort }}
           protocol: TCP
+{{- end }}
 {{- end }}
