@@ -65,6 +65,24 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
+// managerClientOptions configures the manager's client to never cache Secrets. The manager's
+// default client caches every type it reads via a List+Watch informer, but Secrets are read by
+// name only (GitOpsRepo.SecretRef, WebhookReceiver.SecretRef) - the ServiceAccount deliberately
+// has no cluster-wide list/watch on Secrets (KSV-0041; a namespaced Role grants get on one named
+// Secret only), so a cached Get would block forever waiting for an informer sync that can never
+// succeed. Confirmed for real against a live cluster (not caught by any fake-client or
+// envtest-with-admin-creds test, which bypass RBAC entirely): the reflector logs "secrets is
+// forbidden ... at the cluster scope" and retries indefinitely, hanging every caller of a cached
+// Secret Get, including the webhook receiver and the pre-existing GitOpsRepo path, silently, with
+// no timeout.
+//
+// Extracted to a named value, not inlined into the ctrl.NewManager call below, so
+// main_test.go's regression test (issue #58) verifies the exact configuration shipped, not a
+// hand-copied duplicate that could silently drift from it.
+var managerClientOptions = client.Options{
+	Cache: &client.CacheOptions{DisableFor: []client.Object{&corev1.Secret{}}},
+}
+
 // nolint:gocyclo
 func main() {
 	var metricsAddr string
@@ -171,19 +189,8 @@ func main() {
 	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
-		// The manager's default client caches every type it reads via a List+Watch informer.
-		// Secrets are read by name only (GitOpsRepo.SecretRef, WebhookReceiver.SecretRef) - the
-		// ServiceAccount deliberately has no cluster-wide list/watch on Secrets (KSV-0041; a
-		// namespaced Role grants get on one named Secret only), so a cached Get would block
-		// forever waiting for an informer sync that can never succeed. Confirmed for real against
-		// a live cluster (not caught by any fake-client or envtest-with-admin-creds test, which
-		// bypass RBAC entirely): the reflector logs "secrets is forbidden ... at the cluster
-		// scope" and retries indefinitely, hanging every caller of a cached Secret Get, including
-		// the webhook receiver and the pre-existing GitOpsRepo path, silently, with no timeout.
-		Client: client.Options{
-			Cache: &client.CacheOptions{DisableFor: []client.Object{&corev1.Secret{}}},
-		},
+		Scheme:                 scheme,
+		Client:                 managerClientOptions,
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
