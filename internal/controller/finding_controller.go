@@ -277,15 +277,12 @@ func (r *FindingReconciler) tryProposePullRequest(ctx context.Context, finding *
 	// means that failure keeps surfacing as a visible error instead of silently exhausting a
 	// namespace's or the cluster's entire pull request allowance (as low as 1/24h) on an attempt
 	// that could never have succeeded regardless of budget.
-	secret := &corev1.Secret{}
 	secretKey := client.ObjectKey{Namespace: policy.Namespace, Name: policy.Spec.GitOpsRepo.SecretRef.Name}
-	if err := r.Get(ctx, secretKey, secret); err != nil {
-		return fmt.Errorf("getting GitOpsRepo secret %s: %w", secretKey, err)
+	tokenBytes, err := signal.ResolveSecretKey(ctx, r.Client, secretKey, "token")
+	if err != nil {
+		return fmt.Errorf("resolving GitOpsRepo secret: %w", err)
 	}
-	token := string(secret.Data["token"])
-	if token == "" {
-		return fmt.Errorf("secret %s has no data key %q", secretKey, "token")
-	}
+	token := string(tokenBytes)
 
 	allowed, err := signal.CheckPullRequestBudget(ctx, r.Client, policy)
 	if err != nil {

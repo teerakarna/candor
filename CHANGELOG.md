@@ -195,14 +195,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Thirty-six findings total came from eight `/code-review high` passes on this change before opening
 its PR (candor's own new `CLAUDE.md`, "re-run after fixing what it finds, not just once. Stop once
 a pass comes back clean, not before") - none were caught by the test suite that existed at the time
-each pass ran. Four lower-severity findings are deliberately deferred rather than bundled in
-(#61: provider-specific validation doesn't generalize past this one instance yet; #62: the
-receiver's port is hand-duplicated across manifests the same way every other port in them already
-is, not a new inconsistency this change introduced; #63: `Ingest`'s synchronous outbound
-notification is pre-existing behavior shared with the Trivy path, not something to fix inside this
-PR's scope; #64: `config/network-policy/` was already disconnected from `config/default` before
-this change, so kustomize installs get no NetworkPolicy regardless of the fix above - a
-pre-existing distribution-parity gap found while fixing this, not introduced by it).
+each pass ran. Seven lower-severity findings were deliberately deferred rather than bundled in
+(#58, #59, #60, #61, #62, #63, #64 - filed as separate issues per this repo's own "issue before
+architecture" rule). #58 (RBAC-scoped envtest coverage for the cached-Secret-read fix above), #59
+(deduplicating the Secret resolve-and-validate logic `GitOpsRepo` and the webhook receiver each
+had their own copy of), and #60 (a short-TTL cache bounding apiserver load from repeated Secret
+reads on this now-uncached path) have since landed. #61 (provider-specific validation doesn't
+generalize past this one instance yet), #62 (the receiver's port is hand-duplicated across
+manifests the same way every other port in them already is, not a new inconsistency this change
+introduced), #63 (`Ingest`'s synchronous outbound notification is pre-existing behavior shared with
+the Trivy path, not something to fix inside this PR's scope), and #64 (`config/network-policy/` was
+already disconnected from `config/default` before this change, so kustomize installs get no
+NetworkPolicy regardless of the fix above - a pre-existing distribution-parity gap found while
+fixing this, not introduced by it) remain open, each needing its own design decision rather than a
+quick fix.
+
+- `internal/signal.ResolveSecretKey` (#59): the single place that resolves a namespaced Secret by
+  ref and validates a data key is present and non-empty, used by both `GitOpsRepo`'s pull-request
+  path and the webhook receiver's HMAC-key path. They used to duplicate this logic, including the
+  identical `"secret %s has no data key %q"` error string, with no single place to fix a bug in it
+  for either path.
+- Webhook receiver: resolved HMAC keys are now cached in-process for 20s
+  (`hmacKeyCacheTTL`, #60). Disabling the manager's Secret cache (the fix above) turned every
+  request's Secret `Get` into an uncached, direct apiserver round trip - including requests that
+  fail signature verification regardless, since the Secret has to be read before a signature can
+  be checked at all. TTL-based, not watch-invalidated: a watch would need back the same
+  cluster-wide list/watch permission on Secrets that disabling the cache was meant to avoid
+  needing. A misconfigured or missing Secret is never cached, so fixing it (creating or correcting
+  the Secret) takes effect on the very next request rather than waiting out the TTL. Concurrent
+  cache misses for the same Secret (a burst landing right after one TTL expiry) are coalesced into
+  one resolve call via `singleflight`, not one apiserver `Get` per waiting goroutine - that shared
+  call uses its own fixed `secretResolveTimeout` (5s), not any one participating request's own
+  context. Deriving it from whichever request happens to become the singleflight leader was tried
+  and rejected twice: tying it to the leader's own context let that one request's cancellation
+  (client disconnect, its own deadline) fail every other request coalesced onto it despite their
+  own contexts being healthy; tying it to the leader's own *remaining* budget instead (to avoid
+  doubling this handler's worst-case latency) still made every coalesced request's outcome depend
+  on a completely unrelated request's timeline - a follower with a fresh, generous budget could
+  fail because it joined a leader whose own `SignalPolicy` Get had already eaten most of its
+  budget. A fixed, independent timeout on the shared call avoids both: no participant's success
+  depends on which other request happened to trigger it. A follower still respects only its own
+  context's deadline while waiting, though - `DoChan`, not `Do`, so one waiter can give up on its
+  own budget without affecting the shared call it's waiting on. And a cache entry is now swept on
+  every `set`, not only lazily on a matching `get`, so a Secret that stops being queried entirely
+  (a deleted/renamed `SignalPolicy`, a rotation under a new name) doesn't linger in memory for the
+  life of the process. Five consecutive `/code-review high` passes on this cache found and fixed a
+  real bug each before it shipped.
+
+A further `/code-review high` pass on #59/#60 found one more gap, filed rather than folded in
+since it's a different call path with its own design tradeoffs: `GitOpsRepo`'s Secret token lookup
+goes through the same new `ResolveSecretKey` helper but has no equivalent cache, so it still
+suffers the identical uncached-apiserver-round-trip regression, reachable indirectly through
+Finding churn rather than directly through HTTP requests (#67).
 
 ### Security
 
