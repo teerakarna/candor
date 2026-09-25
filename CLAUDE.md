@@ -21,7 +21,22 @@ delivery status. This file adds what's specific to working here as an agent.
     CI doesn't check whether a claim in a comment or commit message was verified before being written.
 - Re-run `/code-review` after fixing what it finds, not just once - a second pass has caught a real
   bug the previous pass's own fix introduced elsewhere in this ecosystem (see loom's `CLAUDE.md`).
-  Stop once a pass comes back clean, not before.
+  Stop once a pass comes back clean of correctness/critical findings, not before - but don't treat
+  "clean" as the only stopping signal, and don't loop forever chasing it either. Track the trend
+  across passes instead of a flat rule:
+  - If severity/count of findings is decreasing pass over pass, keep going until one pass surfaces
+    zero correctness or critical findings (style/duplication findings alone don't block stopping).
+  - If the trend is flat, oscillating, or a clean-ish pass is followed by a fresh correctness or
+    critical finding, that's real unresolved complexity, not review noise - extend rather than
+    stopping on a fixed schedule.
+  - Either way, apply a hard ceiling: 4 passes for a typical change, up to 6-8 for something
+    concurrency-heavy or template-heavy - patterns that have repeatedly produced real bugs here
+    (slice 10's async webhook-notification pool plus Helm port-validation work took 9 passes
+    before converging: unbounded goroutine growth, a deadlocked test, an argument-evaluation-order
+    bug that skipped a callback, missing panic recovery on two separate code paths, and several
+    Helm template-validation edge cases, severity mostly but not strictly decreasing round over
+    round). At the ceiling, stop unconditionally, document remaining known risks in the PR
+    description or `CHANGELOG.md` rather than chasing them further, and ship.
 - If the review agent stalls or can't complete, proceed on the strength of the full automated gate
   above plus manual verification, and say so plainly in the PR description rather than presenting
   it as a completed review.
