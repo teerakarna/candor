@@ -500,6 +500,39 @@ unverified claim this project's whole thesis argues against: the right sequence 
 support (slice 10), (b) measure a good off-the-shelf open model against the hosted default on the
 fixture suite, (c) only fine-tune if that measurement shows a real, published gap.
 
+Deferred, deliberately not scoped as a slice, and gated on the fine-tuning item directly above:
+graduated handover from the hosted default to a locally-served model, with the hosted model
+shifting to spot-check quality control rather than doing every enrichment itself. The idea has a
+genuine foundation already in place, not a speculative one - `Finding.status.verificationOutcome`
+(resolved/recurred/still-present, slice 7) is real, already-instrumented ground truth on past LLM
+output, generated as a side effect of normal operation rather than a bespoke evaluation harness.
+That's the data half of a teacher-student distillation loop, for free.
+
+Splitting what "distillation" actually names here matters, because its two halves belong in very
+different places:
+
+- **Training a smaller model on that history is not this project's job.** It needs a training
+  pipeline (LoRA/QLoRA, GPU time, existing OSS tooling such as axolotl or unsloth) - a separate
+  system, not something that belongs inside a Go reconciler loop. The honest scope for Candor's own
+  side of this is narrow: export the (input, teacher output, verified outcome) history in a usable
+  format. The fine-tune itself stays an external, human-run, periodic job, the same shape slice 12's
+  deferred item above already uses - the result comes back as an ordinary GGUF model loaded via
+  Ollama like any other, nothing new for the operator to know about.
+- **Confidence-gated routing is the part that actually fits inside Candor**, and it is a natural
+  extension of machinery that already exists rather than a new category of thing: slice 5's
+  budget/degraded-mode logic already decides *whether* to call an LLM at all; this would extend
+  that decision to *which* one, per fingerprint-class, from a rolling confidence score built on real
+  verification history - with periodic forced shadow-calls to the hosted model to keep that score
+  honest rather than self-reinforcing on the small model's own mistakes. A real champion/challenger
+  pattern, well understood elsewhere, not exotic - but a materially bigger feature than anything
+  shipped so far, and it cannot be built before slice 12 exists: "confident enough to hand over"
+  isn't a claim this project can make without the measurement harness that slice defines.
+
+Not committed to as a slice. Recorded here so the idea isn't lost, and so building it later is a
+deliberate scope decision - this turns Candor from a K8s operator into a K8s operator plus an
+ongoing MLOps feedback loop, a real jump in maintenance surface that deserves weighing on its own,
+not sliding into as a side effect of slice 12.
+
 Grammar-constrained output for a locally-served model is real but conditional, verified 2026-09-24
 against Ollama v0.34.3 (`llama3.2:3b`) before slice 10 implementation started, see issue #52's
 comments for the raw evidence: passing a full JSON schema via the `format` field genuinely
