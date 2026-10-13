@@ -135,6 +135,10 @@ dev-status: ## Show Candor's pods on the local dev cluster
 dev-down: ## Tear down the local dev cluster created by dev-up
 	@$(KIND) delete cluster --name $(DEV_KIND_CLUSTER)
 
+.PHONY: eval
+eval: ## Run hack/eval's fixture suite against the Anthropic backend and publish hack/eval/report.md (needs ANTHROPIC_API_KEY; see hack/eval/README.md)
+	go run ./hack/eval
+
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
 	"$(GOLANGCI_LINT)" run
