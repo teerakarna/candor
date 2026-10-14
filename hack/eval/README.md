@@ -1,10 +1,10 @@
 # Fixture suite
 
-Measures the Anthropic backend's actual accuracy on Candor's real enrichment task, instead of
-asserting it from reputation or a third-party benchmark - the fixture suite docs/design.md's
-evidence gap #7 answer promises ([issue #106](https://github.com/teerakarna/candor/issues/106)).
-[Issue #107](https://github.com/teerakarna/candor/issues/107) extends this same suite to Ollama
-candidate models once this exists.
+Measures each configured LLM backend's actual accuracy on Candor's real enrichment task, instead
+of asserting it from reputation or a third-party benchmark - the fixture suite docs/design.md's
+evidence gap #7 answer promises ([issue #106](https://github.com/teerakarna/candor/issues/106),
+extended to Ollama candidate models by
+[issue #107](https://github.com/teerakarna/candor/issues/107)).
 
 `fixtures.go` holds the suite: eight cases, each a real-shaped `llm.Request` paired with the
 answer a correct enrichment should produce. Four are real, named CVEs with a single fixed version
@@ -22,10 +22,20 @@ it runs under the normal `make test`.
 
 ## Run it
 
+Each backend is independently opt-in - set the credentials/config for whichever you want to run,
+and `make eval` runs all of them and publishes one combined report:
+
 ```sh
-export ANTHROPIC_API_KEY=...   # a real key - this makes real API calls and spends real credits
+export ANTHROPIC_API_KEY=...            # real key - makes real API calls, spends real credits
+export CANDOR_OLLAMA_HOST=http://localhost:11434   # a real reachable Ollama instance - see hack/ollama-dev/
 make eval
 ```
+
+Running with only `ANTHROPIC_API_KEY` set behaves exactly as it did before #107 - one backend, one
+section in the report. `CANDOR_OLLAMA_HOST` must be set explicitly; there's no silent attempt
+against `localhost:11434` for a run that only wanted the hosted baseline. `CANDOR_LLM_MODEL`
+overrides the Ollama candidate model (default `llama3.2:3b`, matching the model issue #52 already
+verified grammar-constrained output against).
 
 Prints the report and writes it to `report.md` in this directory. Commit the refreshed
 `report.md` when you want the published numbers to reflect a new run (a new fixture, a model
