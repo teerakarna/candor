@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	github.com/google/go-github/v76 v76.0.0
-	github.com/onsi/ginkgo/v2 v2.33.0
+	github.com/onsi/ginkgo/v2 v2.33.1
 	github.com/onsi/gomega v1.44.0
 	github.com/prometheus/client_golang v1.24.1
 	gitlab.com/gitlab-org/api/client-go v1.46.0
