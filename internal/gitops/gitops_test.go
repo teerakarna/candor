@@ -2,6 +2,7 @@ package gitops
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -162,5 +163,42 @@ func TestComputeFix_MissingArtifactInfo_NotOK(t *testing.T) {
 	}
 	if ok {
 		t.Error("expected ok=false when the report names no repository/tag")
+	}
+}
+
+func TestPrBody_IncludesVerificationNoticeAndTraceability(t *testing.T) {
+	fix := Fix{Repository: "ghcr.io/foo/bar", CurrentTag: "v1.0.0", NewTag: "v1.0.1"}
+	finding := testFinding("VulnerabilityReport", testRefName)
+	finding.Spec.Summary = "CVE-2024-XXXXX in libfoo"
+	finding.Status.Fingerprint = "abcdef0123456789abcdef0123456789"
+	finding.Status.Hypotheses = []candorv1alpha1.Hypothesis{
+		{Cause: "outdated libfoo", Confidence: 80, Rationale: "CVE fixed in a newer release", RecommendedAction: candorv1alpha1.ActionProposePullRequest},
+	}
+
+	body := prBody(fix, finding)
+
+	for _, want := range []string{
+		"CVE-2024-XXXXX in libfoo",
+		"Bumps `ghcr.io/foo/bar` from `v1.0.0` to `v1.0.1`.",
+		"outdated libfoo",
+		"verified after merge",
+		"Resolved or Recurred",
+		testNamespace + "/finding",
+		shortFingerprint(finding.Status.Fingerprint),
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("prBody() missing %q, got:\n%s", want, body)
+		}
+	}
+}
+
+func TestPrBody_NoFingerprint_FallsBackCleanly(t *testing.T) {
+	fix := Fix{Repository: "ghcr.io/foo/bar", CurrentTag: "v1.0.0", NewTag: "v1.0.1"}
+	finding := testFinding("VulnerabilityReport", testRefName)
+
+	body := prBody(fix, finding)
+
+	if !strings.Contains(body, "fingerprint `unknown`") {
+		t.Errorf("prBody() with no fingerprint set should fall back to the same \"unknown\" label shortFingerprint uses elsewhere, got:\n%s", body)
 	}
 }
