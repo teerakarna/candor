@@ -111,7 +111,13 @@ func prBody(fix Fix, finding *candorv1alpha1.Finding) string {
 		}
 	}
 
-	fmt.Fprintf(&b, "\n---\nOpened automatically by [Candor](https://github.com/teerakarna/candor) for Finding `%s/%s`.\n", finding.Namespace, finding.Name)
+	// A real differentiator (docs/design.md pillar 4) that was previously invisible in the one
+	// place a reviewer is actually looking: nothing told them this fix gets checked for real
+	// after merge. Stated here, not just left to candor_verification_transitions_total.
+	b.WriteString("\n---\nThis fix will be verified after merge: once the image updates, Candor " +
+		"re-checks the underlying scan and marks this Finding Resolved or Recurred.\n")
+	fmt.Fprintf(&b, "\nOpened automatically by [Candor](https://github.com/teerakarna/candor) for Finding `%s/%s` (fingerprint `%s`).\n",
+		finding.Namespace, finding.Name, shortFingerprint(finding.Status.Fingerprint))
 	return b.String()
 }
 
