@@ -43,6 +43,19 @@ jobs:
         env:
           ENVTEST_K8S_VERSION: ${{ matrix.envtest-k8s-version }}
 
+  goreleaser-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # release.yml only runs goreleaser for real on a tag push, so a config mistake (a duplicate
+      # sign id, a bad field) otherwise surfaces mid-release. `check` validates the config alone:
+      # no build, no signing, no OIDC needed.
+      - name: goreleaser check
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
+        with:
+          args: check
+
   lint:
     runs-on: ubuntu-latest
     steps:
