@@ -31,7 +31,8 @@ checksum:
 # --output-signature/--output-certificate flags - verified against the installed cosign CLI's own
 # --help before writing this, since those flags no longer exist in current cosign.
 signs:
-  - cmd: cosign
+  - id: checksums
+    cmd: cosign
     signature: "${artifact}.bundle"
     args:
       - sign-blob
@@ -39,6 +40,21 @@ signs:
       - "--yes"
       - "${artifact}"
     artifacts: checksum
+    output: true
+  # Same pattern, applied per archive directly rather than only via checksums.txt. The checksums
+  # signature already covers every archive transitively (verify checksums.txt, then match a
+  # binary's hash against it), but OpenSSF Scorecard's Signed-Releases check looks for a signature
+  # artifact matching each binary's own filename, not a checksums-mediated chain, and scores 0/10
+  # without one (issue #126) - this closes that gap directly rather than arguing with the heuristic.
+  - id: archives
+    cmd: cosign
+    signature: "${artifact}.bundle"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "--yes"
+      - "${artifact}"
+    artifacts: archive
     output: true
 
 changelog:
@@ -89,4 +105,14 @@ release:
       --certificate-identity-regexp "^https://github.com/teerakarna/candor/" \
       --certificate-oidc-issuer https://token.actions.githubusercontent.com \
       checksums.txt
+    ```
+
+    Each archive is also signed individually (same identity), if you'd rather verify one directly
+    without going through checksums.txt:
+
+    ```
+    cosign verify-blob --bundle candor_<os>_<arch>.tar.gz.bundle \
+      --certificate-identity-regexp "^https://github.com/teerakarna/candor/" \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      candor_<os>_<arch>.tar.gz
     ```
