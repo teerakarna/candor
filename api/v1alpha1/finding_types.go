@@ -201,6 +201,8 @@ type FindingStatus struct {
 // +kubebuilder:printcolumn:name="Resource",type=string,JSONPath=".spec.source.name"
 // +kubebuilder:printcolumn:name="Summary",type=string,JSONPath=".spec.summary"
 // +kubebuilder:printcolumn:name="Verified",type=string,JSONPath=".status.verificationOutcome"
+// +kubebuilder:printcolumn:name="Action",type=string,JSONPath=".status.hypotheses[0].recommendedAction"
+// +kubebuilder:printcolumn:name="Confidence",type=integer,JSONPath=".status.hypotheses[0].confidence"
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=".metadata.creationTimestamp"
 
 // Finding is the Schema for the findings API

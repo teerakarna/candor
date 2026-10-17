@@ -33,6 +33,12 @@ spec:
     - jsonPath: .status.verificationOutcome
       name: Verified
       type: string
+    - jsonPath: .status.hypotheses[0].recommendedAction
+      name: Action
+      type: string
+    - jsonPath: .status.hypotheses[0].confidence
+      name: Confidence
+      type: integer
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
