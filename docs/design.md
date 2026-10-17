@@ -482,7 +482,12 @@ budget explicitly, or it is not a solution.
     only Anthropic model choices - "which open model, if any, is good enough" becomes an answerable
     question at that point, and should be answered by this suite, not by reputation or a vendor
     benchmark.
-13. Blog article.
+13. Blog article. **Done**, and more than planned: a 4-part series
+    ([Building Candor](https://teerakarna.github.io/series/building-candor/)), not one post - the
+    research and gaps table from this doc's own history, the operator/provider pattern and
+    fingerprinting, the LLM interface/budget/prompt-injection defenses, and the verification loop
+    and dashboard, each with the real bugs and dead ends hit while building them, not a cleaned-up
+    retelling.
 
 Quarantine/Enforcing mode is explicitly post-v1, gated on slice 7.
 

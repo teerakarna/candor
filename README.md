@@ -8,6 +8,10 @@ requests — with bounded LLM spend and a published record of its own accuracy.
 
 📖 **[Full docs, architecture, and the case for Candor →](https://teerakarna.github.io/candor/)**
 
+📝 **[Building Candor →](https://teerakarna.github.io/series/building-candor/)** - a 4-part series
+on the design decisions, the evidence behind them, and what it took to get the verification loop
+and dashboard honest.
+
 **Status**: early build, shipped in slices — see [`docs/design.md`](docs/design.md) for exactly
 what's done.
 
