@@ -23,10 +23,45 @@
         "refresh": 1,
         "regex": "",
         "options": []
+      },
+      {
+        "name": "namespace",
+        "label": "Namespace",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": "label_values({__name__=~\"candor_findings_current|candor_signalpolicy_budget_calls_limit\"}, namespace)",
+        "current": {
+          "value": "$__all",
+          "text": "All"
+        },
+        "includeAll": true,
+        "multi": false,
+        "hide": 0,
+        "refresh": 2,
+        "regex": "",
+        "sort": 1
       }
     ]
   },
   "panels": [
+    {
+      "id": 50,
+      "title": "",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "**Candor** - signal-driven, cost-accountable Kubernetes operator. **Outstanding** (top row below) is what needs attention right now, by severity. **Resolved (7d)** / **Recurred (7d)** are the last week's history - a Finding that recurred was Resolved and came back. \"Cost & Operator Health\" below is Candor's own self-observability, not a finding about your cluster. [Docs](https://github.com/teerakarna/candor) - [Report an issue](https://github.com/teerakarna/candor/issues/new) The **Namespace** filter above applies to Outstanding and Budget Usage only - Resolved/Recurred, Verification Transitions, LLM Calls, and Enrichment Skipped are cluster-wide metrics today, not scoped per namespace."
+      }
+    },
     {
       "id": 20,
       "title": "Findings Status",
@@ -35,7 +70,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 0,
+        "y": 3,
         "w": 24,
         "h": 1
       },
@@ -52,7 +87,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 1,
+        "y": 4,
         "w": 6,
         "h": 3
       },
@@ -104,14 +139,14 @@
           },
           "instant": true,
           "range": false,
-          "expr": "sum(candor_findings_current{severity=\"CRITICAL\", outcome!=\"Resolved\"}) or vector(0)",
+          "expr": "sum(candor_findings_current{severity=\"CRITICAL\", outcome!=\"Resolved\", namespace=~\"$namespace\"}) or vector(0)",
           "legendFormat": "Outstanding"
         }
       ]
     },
     {
       "id": 112,
-      "title": "",
+      "title": "Resolved (7d)",
       "description": "candor_verification_transitions_total{outcome=\"resolved\",severity=\"CRITICAL\"} over 7 days - taken care of.",
       "type": "stat",
       "datasource": {
@@ -120,7 +155,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 7,
         "w": 6,
         "h": 3
       },
@@ -175,7 +210,7 @@
     },
     {
       "id": 113,
-      "title": "",
+      "title": "Recurred (7d)",
       "description": "candor_verification_transitions_total{outcome=\"recurred\",severity=\"CRITICAL\"} over 7 days - a Finding that was Resolved and came back.",
       "type": "stat",
       "datasource": {
@@ -184,7 +219,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 7,
+        "y": 10,
         "w": 6,
         "h": 3
       },
@@ -252,7 +287,7 @@
       },
       "gridPos": {
         "x": 6,
-        "y": 1,
+        "y": 4,
         "w": 6,
         "h": 3
       },
@@ -304,14 +339,14 @@
           },
           "instant": true,
           "range": false,
-          "expr": "sum(candor_findings_current{severity=\"HIGH\", outcome!=\"Resolved\"}) or vector(0)",
+          "expr": "sum(candor_findings_current{severity=\"HIGH\", outcome!=\"Resolved\", namespace=~\"$namespace\"}) or vector(0)",
           "legendFormat": "Outstanding"
         }
       ]
     },
     {
       "id": 122,
-      "title": "",
+      "title": "Resolved (7d)",
       "description": "candor_verification_transitions_total{outcome=\"resolved\",severity=\"HIGH\"} over 7 days - taken care of.",
       "type": "stat",
       "datasource": {
@@ -320,7 +355,7 @@
       },
       "gridPos": {
         "x": 6,
-        "y": 4,
+        "y": 7,
         "w": 6,
         "h": 3
       },
@@ -375,7 +410,7 @@
     },
     {
       "id": 123,
-      "title": "",
+      "title": "Recurred (7d)",
       "description": "candor_verification_transitions_total{outcome=\"recurred\",severity=\"HIGH\"} over 7 days - a Finding that was Resolved and came back.",
       "type": "stat",
       "datasource": {
@@ -384,7 +419,7 @@
       },
       "gridPos": {
         "x": 6,
-        "y": 7,
+        "y": 10,
         "w": 6,
         "h": 3
       },
@@ -452,7 +487,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 1,
+        "y": 4,
         "w": 6,
         "h": 3
       },
@@ -504,14 +539,14 @@
           },
           "instant": true,
           "range": false,
-          "expr": "sum(candor_findings_current{severity=\"MEDIUM\", outcome!=\"Resolved\"}) or vector(0)",
+          "expr": "sum(candor_findings_current{severity=\"MEDIUM\", outcome!=\"Resolved\", namespace=~\"$namespace\"}) or vector(0)",
           "legendFormat": "Outstanding"
         }
       ]
     },
     {
       "id": 132,
-      "title": "",
+      "title": "Resolved (7d)",
       "description": "candor_verification_transitions_total{outcome=\"resolved\",severity=\"MEDIUM\"} over 7 days - taken care of.",
       "type": "stat",
       "datasource": {
@@ -520,7 +555,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 4,
+        "y": 7,
         "w": 6,
         "h": 3
       },
@@ -575,7 +610,7 @@
     },
     {
       "id": 133,
-      "title": "",
+      "title": "Recurred (7d)",
       "description": "candor_verification_transitions_total{outcome=\"recurred\",severity=\"MEDIUM\"} over 7 days - a Finding that was Resolved and came back.",
       "type": "stat",
       "datasource": {
@@ -584,7 +619,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 7,
+        "y": 10,
         "w": 6,
         "h": 3
       },
@@ -652,7 +687,7 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 1,
+        "y": 4,
         "w": 6,
         "h": 3
       },
@@ -704,14 +739,14 @@
           },
           "instant": true,
           "range": false,
-          "expr": "sum(candor_findings_current{severity=\"LOW\", outcome!=\"Resolved\"}) or vector(0)",
+          "expr": "sum(candor_findings_current{severity=\"LOW\", outcome!=\"Resolved\", namespace=~\"$namespace\"}) or vector(0)",
           "legendFormat": "Outstanding"
         }
       ]
     },
     {
       "id": 142,
-      "title": "",
+      "title": "Resolved (7d)",
       "description": "candor_verification_transitions_total{outcome=\"resolved\",severity=\"LOW\"} over 7 days - taken care of.",
       "type": "stat",
       "datasource": {
@@ -720,7 +755,7 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 4,
+        "y": 7,
         "w": 6,
         "h": 3
       },
@@ -775,7 +810,7 @@
     },
     {
       "id": 143,
-      "title": "",
+      "title": "Recurred (7d)",
       "description": "candor_verification_transitions_total{outcome=\"recurred\",severity=\"LOW\"} over 7 days - a Finding that was Resolved and came back.",
       "type": "stat",
       "datasource": {
@@ -784,7 +819,7 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 7,
+        "y": 10,
         "w": 6,
         "h": 3
       },
@@ -849,7 +884,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 10,
+        "y": 13,
         "w": 24,
         "h": 1
       },
@@ -866,7 +901,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 11,
+        "y": 14,
         "w": 12,
         "h": 8
       },
@@ -913,7 +948,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 11,
+        "y": 14,
         "w": 12,
         "h": 8
       },
@@ -971,7 +1006,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 19,
+        "y": 22,
         "w": 24,
         "h": 1
       },
@@ -988,7 +1023,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 20,
+        "y": 23,
         "w": 12,
         "h": 8
       },
@@ -1035,7 +1070,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 20,
+        "y": 23,
         "w": 12,
         "h": 8
       },
@@ -1074,37 +1109,58 @@
     {
       "id": 4,
       "title": "Budget Usage per SignalPolicy",
-      "description": "candor_signalpolicy_budget_calls_used vs candor_signalpolicy_budget_calls_limit.",
-      "type": "timeseries",
+      "description": "candor_signalpolicy_budget_calls_used / candor_signalpolicy_budget_calls_limit, per SignalPolicy - how much headroom is left right now, not a trend over time.",
+      "type": "gauge",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
       },
       "gridPos": {
         "x": 0,
-        "y": 28,
+        "y": 31,
         "w": 24,
         "h": 8
       },
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "palette-classic"
+            "mode": "thresholds"
           },
-          "custom": {},
           "mappings": [],
-          "unit": "short"
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "red",
+                "value": 0.8
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
         },
-        "tooltip": {
-          "mode": "multi"
-        }
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
       },
       "targets": [
         {
@@ -1113,17 +1169,10 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "candor_signalpolicy_budget_calls_used",
-          "legendFormat": "{{namespace}}/{{signalpolicy}} used"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "candor_signalpolicy_budget_calls_limit",
-          "legendFormat": "{{namespace}}/{{signalpolicy}} limit"
+          "instant": true,
+          "range": false,
+          "expr": "candor_signalpolicy_budget_calls_used{namespace=~\"$namespace\"} / candor_signalpolicy_budget_calls_limit{namespace=~\"$namespace\"}",
+          "legendFormat": "{{namespace}}/{{signalpolicy}}"
         }
       ]
     }
