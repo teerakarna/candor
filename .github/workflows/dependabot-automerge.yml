@@ -4,14 +4,18 @@ on:
   pull_request:
     branches: [main]
 
-permissions:
-  contents: write
-  pull-requests: write
+# Workflow-level write here (vs. job-level, matching release-please.yml's own pattern) was a real
+# Scorecard Token-Permissions finding, not just a style nit: a second job added to this file later
+# would silently inherit write access it never asked for. Zero behavior change with one job.
+permissions: {}
 
 jobs:
   automerge:
     if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Fetch Dependabot metadata
         id: metadata

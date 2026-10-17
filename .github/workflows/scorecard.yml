@@ -29,6 +29,14 @@ jobs:
           results_file: results.sarif
           results_format: sarif
           publish_results: true
+          # The default GITHUB_TOKEN can't read classic branch protection rules (confirmed by the
+          # Branch-Protection check's own -1 "internal error" result, not a real 0 - see
+          # https://github.com/ossf/scorecard-action/blob/main/docs/authentication/fine-grained-auth-token.md).
+          # SCORECARD_TOKEN is a fine-grained PAT scoped to this repo only, read-only
+          # "Administration" permission - nothing this token can do beyond reading branch
+          # protection settings. Falls back to the default token (same as before) if the secret
+          # isn't set, so this is safe to merge before the secret exists.
+          repo_token: ${{ secrets.SCORECARD_TOKEN || secrets.GITHUB_TOKEN }}
 
       - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
