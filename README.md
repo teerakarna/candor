@@ -309,14 +309,44 @@ conservative built-in default.
 
 ### Grafana dashboard
 
-Ship a pre-built dashboard (LLM calls, enrichment skipped by reason, verification transitions,
-budget usage, cost-avoidance ratio) as a ConfigMap the kube-prometheus-stack Grafana sidecar
-auto-discovers:
+![The Candor Overview dashboard: open findings by severity, what was fixed or came back, fix pull
+requests, AI calls and budget, and a tool health row](docs/images/dashboard.png)
+
+*The dashboard, shown with simulated data. `hack/grafana-preview` runs the same view locally
+without a cluster.*
+
+It's written for people who need to know how the tool is doing, not only the engineers running it:
+
+- **Where we stand** - open findings by severity, with what was fixed or came back this week.
+- **Is it working?** - findings detected, fixed and came back over time, and how many fix pull
+  requests Candor opened or failed to open.
+- **What it costs** - AI calls made, why the AI was not called, the share of calls avoided, and
+  budget used per policy.
+- **Is the tool healthy?** - receiver running, failed notifications, AI call errors and pull
+  request failures, each green or red.
+
+Ship it as a ConfigMap the kube-prometheus-stack Grafana sidecar auto-discovers:
 
 ```sh
 helm upgrade --install candor oci://ghcr.io/teerakarna/charts/candor \
   --set prometheus.enabled=true --set grafanaDashboard.enabled=true
 ```
+
+### Integrations
+
+Candor plugs into what you already run through interfaces that exist today:
+
+- **Metrics** - a Prometheus `/metrics` endpoint. Anything that scrapes Prometheus format can read
+  it; `prometheus.enabled` adds a `ServiceMonitor` for the Prometheus Operator.
+- **Notifications out** - a plain JSON webhook on every finding event, plus a periodic digest. See
+  [Webhook notifications and digests](#webhook-notifications-and-digests).
+- **Signals in** - a generic webhook receiver for tools that have no Kubernetes CRD. See
+  [Receiving signals from tools without a Kubernetes CRD](#receiving-signals-from-tools-without-a-kubernetes-crd).
+- **Findings as Kubernetes resources** - `kubectl get findings`, or anything that reads custom
+  resources.
+- **Fixes as pull requests** - against GitHub or GitLab, including self-hosted. See
+  [Proposing GitOps pull requests](#proposing-gitops-pull-requests).
+- **Scanner** - Trivy today.
 
 ## Installing without Helm
 
