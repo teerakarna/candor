@@ -5,7 +5,7 @@
     "candor"
   ],
   "schemaVersion": 39,
-  "version": 11,
+  "version": 13,
   "refresh": "1m",
   "time": {
     "from": "now-6h",
@@ -55,11 +55,11 @@
         "x": 0,
         "y": 0,
         "w": 24,
-        "h": 3
+        "h": 2
       },
       "options": {
         "mode": "markdown",
-        "content": "**Candor** finds security problems in your cluster, works out which ones matter, and opens fix pull requests. This page shows how that is going. **Where we stand**: what is still open right now, by severity, and what was fixed or came back this week. **Is it working?**: findings detected and fixed over time, and the fix pull requests Candor has opened. **What it costs**: how often Candor used the AI, how often it avoided doing so, and how much of each budget is used. **Is the tool healthy?**: anything that needs an operator. Green means fine, red means look. The **Namespace** filter applies to the open-findings counts and the AI budget only; everything else is cluster-wide. [Docs](https://github.com/teerakarna/candor) - [Report an issue](https://github.com/teerakarna/candor/issues/new)"
+        "content": "**Candor** finds security problems in your cluster and opens fix pull requests. This page shows how that is going: what is open, whether it is getting fixed, what it costs, and whether the tool itself is healthy. The Namespace filter applies to open findings and AI budget; everything else is cluster-wide. [Docs](https://github.com/teerakarna/candor) - [Report an issue](https://github.com/teerakarna/candor/issues/new)"
       }
     },
     {
@@ -70,7 +70,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 3,
+        "y": 2,
         "w": 24,
         "h": 1
       },
@@ -87,7 +87,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 4,
+        "y": 3,
         "w": 6,
         "h": 3
       },
@@ -124,11 +124,12 @@
         },
         "orientation": "auto",
         "textMode": "value_and_name",
-        "colorMode": "background",
+        "colorMode": "value",
         "wideLayout": false,
         "text": {
-          "valueSize": 32
-        }
+          "valueSize": 34
+        },
+        "graphMode": "none"
       },
       "targets": [
         {
@@ -143,6 +144,227 @@
           "legendFormat": "Open"
         }
       ]
+    },
+    {
+      "id": 121,
+      "title": "High",
+      "description": "Live count (candor_findings_current), excluding Resolved - needs action.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 3,
+        "w": 6,
+        "h": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "wideLayout": false,
+        "text": {
+          "valueSize": 34
+        },
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "instant": true,
+          "range": false,
+          "expr": "sum(candor_findings_current{severity=\"HIGH\", outcome!=\"Resolved\", namespace=~\"$namespace\"}) or vector(0)",
+          "legendFormat": "Open"
+        }
+      ]
+    },
+    {
+      "id": 131,
+      "title": "Medium",
+      "description": "Live count (candor_findings_current), excluding Resolved - needs action.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 3,
+        "w": 6,
+        "h": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "wideLayout": false,
+        "text": {
+          "valueSize": 34
+        },
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "instant": true,
+          "range": false,
+          "expr": "sum(candor_findings_current{severity=\"MEDIUM\", outcome!=\"Resolved\", namespace=~\"$namespace\"}) or vector(0)",
+          "legendFormat": "Open"
+        }
+      ]
+    },
+    {
+      "id": 141,
+      "title": "Low",
+      "description": "Live count (candor_findings_current), excluding Resolved - needs action.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 3,
+        "w": 6,
+        "h": 3
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "blue",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "wideLayout": false,
+        "text": {
+          "valueSize": 34
+        },
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "instant": true,
+          "range": false,
+          "expr": "sum(candor_findings_current{severity=\"LOW\", outcome!=\"Resolved\", namespace=~\"$namespace\"}) or vector(0)",
+          "legendFormat": "Open"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "title": "Is it working?",
+      "description": "Findings found and fixed over time, and the fix pull requests Candor has opened.",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
     },
     {
       "id": 112,
@@ -188,11 +410,12 @@
         },
         "orientation": "auto",
         "textMode": "value",
-        "colorMode": "background",
+        "colorMode": "value",
         "wideLayout": false,
         "text": {
-          "valueSize": 32
-        }
+          "valueSize": 34
+        },
+        "graphMode": "none"
       },
       "targets": [
         {
@@ -203,8 +426,8 @@
           },
           "instant": true,
           "range": false,
-          "expr": "floor(sum(increase(candor_verification_transitions_total{outcome=\"resolved\", severity=\"CRITICAL\"}[7d])) or vector(0))",
-          "legendFormat": "Resolved (7d)"
+          "expr": "floor(sum(increase(candor_verification_transitions_total{outcome=\"resolved\"}[7d])) or vector(0))",
+          "legendFormat": "Fixed (7d)"
         }
       ]
     },
@@ -218,142 +441,6 @@
         "uid": "${DS_PROMETHEUS}"
       },
       "gridPos": {
-        "x": 0,
-        "y": 10,
-        "w": 6,
-        "h": 3
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "purple",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "colorMode": "background",
-        "wideLayout": false,
-        "text": {
-          "valueSize": 32
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "instant": true,
-          "range": false,
-          "expr": "floor(sum(increase(candor_verification_transitions_total{outcome=\"recurred\", severity=\"CRITICAL\"}[7d])) or vector(0))",
-          "legendFormat": "Recurred (7d)"
-        }
-      ]
-    },
-    {
-      "id": 121,
-      "title": "High",
-      "description": "Live count (candor_findings_current), excluding Resolved - needs action.",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "x": 6,
-        "y": 4,
-        "w": 6,
-        "h": 3
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "orange",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "value_and_name",
-        "colorMode": "background",
-        "wideLayout": false,
-        "text": {
-          "valueSize": 32
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "instant": true,
-          "range": false,
-          "expr": "sum(candor_findings_current{severity=\"HIGH\", outcome!=\"Resolved\", namespace=~\"$namespace\"}) or vector(0)",
-          "legendFormat": "Open"
-        }
-      ]
-    },
-    {
-      "id": 122,
-      "title": "Fixed (7d)",
-      "description": "candor_verification_transitions_total{outcome=\"resolved\",severity=\"HIGH\"} over 7 days - taken care of.",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
         "x": 6,
         "y": 7,
         "w": 6,
@@ -370,7 +457,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
               }
             ]
@@ -388,11 +475,12 @@
         },
         "orientation": "auto",
         "textMode": "value",
-        "colorMode": "background",
+        "colorMode": "value",
         "wideLayout": false,
         "text": {
-          "valueSize": 32
-        }
+          "valueSize": 34
+        },
+        "graphMode": "none"
       },
       "targets": [
         {
@@ -403,151 +491,15 @@
           },
           "instant": true,
           "range": false,
-          "expr": "floor(sum(increase(candor_verification_transitions_total{outcome=\"resolved\", severity=\"HIGH\"}[7d])) or vector(0))",
-          "legendFormat": "Resolved (7d)"
+          "expr": "floor(sum(increase(candor_verification_transitions_total{outcome=\"recurred\"}[7d])) or vector(0))",
+          "legendFormat": "Came back (7d)"
         }
       ]
     },
     {
-      "id": 123,
-      "title": "Came back (7d)",
-      "description": "candor_verification_transitions_total{outcome=\"recurred\",severity=\"HIGH\"} over 7 days - a Finding that was Resolved and came back.",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "x": 6,
-        "y": 10,
-        "w": 6,
-        "h": 3
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "purple",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "colorMode": "background",
-        "wideLayout": false,
-        "text": {
-          "valueSize": 32
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "instant": true,
-          "range": false,
-          "expr": "floor(sum(increase(candor_verification_transitions_total{outcome=\"recurred\", severity=\"HIGH\"}[7d])) or vector(0))",
-          "legendFormat": "Recurred (7d)"
-        }
-      ]
-    },
-    {
-      "id": 131,
-      "title": "Medium",
-      "description": "Live count (candor_findings_current), excluding Resolved - needs action.",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 4,
-        "w": 6,
-        "h": 3
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "value_and_name",
-        "colorMode": "background",
-        "wideLayout": false,
-        "text": {
-          "valueSize": 32
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "instant": true,
-          "range": false,
-          "expr": "sum(candor_findings_current{severity=\"MEDIUM\", outcome!=\"Resolved\", namespace=~\"$namespace\"}) or vector(0)",
-          "legendFormat": "Open"
-        }
-      ]
-    },
-    {
-      "id": 132,
-      "title": "Fixed (7d)",
-      "description": "candor_verification_transitions_total{outcome=\"resolved\",severity=\"MEDIUM\"} over 7 days - taken care of.",
+      "id": 6,
+      "title": "Fix pull requests opened (7d)",
+      "description": "candor_pull_requests_total{result=\"success\"} over 7 days. Each one is a proposed fix waiting for a human to review and merge.",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -570,7 +522,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": null
               }
             ]
@@ -588,11 +540,12 @@
         },
         "orientation": "auto",
         "textMode": "value",
-        "colorMode": "background",
+        "colorMode": "value",
         "wideLayout": false,
         "text": {
-          "valueSize": 32
-        }
+          "valueSize": 34
+        },
+        "graphMode": "none"
       },
       "targets": [
         {
@@ -601,153 +554,16 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
+          "expr": "floor(sum(increase(candor_pull_requests_total{result=\"success\"}[7d])) or vector(0))",
           "instant": true,
-          "range": false,
-          "expr": "floor(sum(increase(candor_verification_transitions_total{outcome=\"resolved\", severity=\"MEDIUM\"}[7d])) or vector(0))",
-          "legendFormat": "Resolved (7d)"
+          "range": false
         }
       ]
     },
     {
-      "id": 133,
-      "title": "Came back (7d)",
-      "description": "candor_verification_transitions_total{outcome=\"recurred\",severity=\"MEDIUM\"} over 7 days - a Finding that was Resolved and came back.",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 10,
-        "w": 6,
-        "h": 3
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "purple",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "colorMode": "background",
-        "wideLayout": false,
-        "text": {
-          "valueSize": 32
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "instant": true,
-          "range": false,
-          "expr": "floor(sum(increase(candor_verification_transitions_total{outcome=\"recurred\", severity=\"MEDIUM\"}[7d])) or vector(0))",
-          "legendFormat": "Recurred (7d)"
-        }
-      ]
-    },
-    {
-      "id": 141,
-      "title": "Low",
-      "description": "Live count (candor_findings_current), excluding Resolved - needs action.",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "x": 18,
-        "y": 4,
-        "w": 6,
-        "h": 3
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "blue",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "value_and_name",
-        "colorMode": "background",
-        "wideLayout": false,
-        "text": {
-          "valueSize": 32
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "instant": true,
-          "range": false,
-          "expr": "sum(candor_findings_current{severity=\"LOW\", outcome!=\"Resolved\", namespace=~\"$namespace\"}) or vector(0)",
-          "legendFormat": "Open"
-        }
-      ]
-    },
-    {
-      "id": 142,
-      "title": "Fixed (7d)",
-      "description": "candor_verification_transitions_total{outcome=\"resolved\",severity=\"LOW\"} over 7 days - taken care of.",
+      "id": 7,
+      "title": "Fix pull requests failed (7d)",
+      "description": "candor_pull_requests_total{result=\"error\"} over 7 days. Candor decided to open a pull request but could not. Needs an operator.",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -772,73 +588,9 @@
               {
                 "color": "green",
                 "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "colorMode": "background",
-        "wideLayout": false,
-        "text": {
-          "valueSize": 32
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "instant": true,
-          "range": false,
-          "expr": "floor(sum(increase(candor_verification_transitions_total{outcome=\"resolved\", severity=\"LOW\"}[7d])) or vector(0))",
-          "legendFormat": "Resolved (7d)"
-        }
-      ]
-    },
-    {
-      "id": 143,
-      "title": "Came back (7d)",
-      "description": "candor_verification_transitions_total{outcome=\"recurred\",severity=\"LOW\"} over 7 days - a Finding that was Resolved and came back.",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "x": 18,
-        "y": 10,
-        "w": 6,
-        "h": 3
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
               },
               {
-                "color": "purple",
+                "color": "red",
                 "value": 1
               }
             ]
@@ -856,11 +608,12 @@
         },
         "orientation": "auto",
         "textMode": "value",
-        "colorMode": "background",
+        "colorMode": "value",
         "wideLayout": false,
         "text": {
-          "valueSize": 32
-        }
+          "valueSize": 34
+        },
+        "graphMode": "none"
       },
       "targets": [
         {
@@ -869,26 +622,11 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
+          "expr": "floor(sum(increase(candor_pull_requests_total{result=\"error\"}[7d])) or vector(0))",
           "instant": true,
-          "range": false,
-          "expr": "floor(sum(increase(candor_verification_transitions_total{outcome=\"recurred\", severity=\"LOW\"}[7d])) or vector(0))",
-          "legendFormat": "Recurred (7d)"
+          "range": false
         }
       ]
-    },
-    {
-      "id": 21,
-      "title": "Is it working?",
-      "description": "Findings found and fixed over time, and the fix pull requests Candor has opened.",
-      "type": "row",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 13,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
     },
     {
       "id": 3,
@@ -901,7 +639,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 14,
+        "y": 10,
         "w": 12,
         "h": 8
       },
@@ -911,7 +649,10 @@
             "mode": "palette-classic"
           },
           "custom": {
-            "axisLabel": "per hour"
+            "axisLabel": "per hour",
+            "showPoints": "never",
+            "lineWidth": 1,
+            "fillOpacity": 6
           },
           "mappings": [],
           "unit": "short"
@@ -958,136 +699,6 @@
       ]
     },
     {
-      "id": 6,
-      "title": "Fix pull requests opened (7d)",
-      "description": "candor_pull_requests_total{result=\"success\"} over 7 days. Each one is a proposed fix waiting for a human to review and merge.",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 14,
-        "w": 6,
-        "h": 4
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "colorMode": "background",
-        "wideLayout": false,
-        "text": {
-          "valueSize": 32
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "floor(sum(increase(candor_pull_requests_total{result=\"success\"}[7d])) or vector(0))",
-          "instant": true,
-          "range": false
-        }
-      ]
-    },
-    {
-      "id": 7,
-      "title": "Fix pull requests that failed (7d)",
-      "description": "candor_pull_requests_total{result=\"error\"} over 7 days. Candor decided to open a pull request but could not. Needs an operator.",
-      "type": "stat",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "x": 18,
-        "y": 14,
-        "w": 6,
-        "h": 4
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "colorMode": "background",
-        "wideLayout": false,
-        "text": {
-          "valueSize": 32
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "floor(sum(increase(candor_pull_requests_total{result=\"error\"}[7d])) or vector(0))",
-          "instant": true,
-          "range": false
-        }
-      ]
-    },
-    {
       "id": 8,
       "title": "Fix pull requests by outcome",
       "description": "candor_pull_requests_total. opened: pull request created. no fix possible: Candor could not produce a concrete change. budget reached: held back by the pull request limit. Shown per hour.",
@@ -1098,9 +709,9 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 18,
+        "y": 10,
         "w": 12,
-        "h": 4
+        "h": 8
       },
       "fieldConfig": {
         "defaults": {
@@ -1108,7 +719,10 @@
             "mode": "palette-classic"
           },
           "custom": {
-            "axisLabel": "per hour"
+            "axisLabel": "per hour",
+            "showPoints": "never",
+            "lineWidth": 1,
+            "fillOpacity": 6
           },
           "mappings": [],
           "unit": "short"
@@ -1171,145 +785,11 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 18,
         "w": 24,
         "h": 1
       },
       "panels": []
-    },
-    {
-      "id": 1,
-      "title": "AI analysis calls",
-      "description": "candor_llm_calls_total. Each call asks the AI to analyse one finding. success: answered. error: the call failed. Shown per hour.",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 23,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "per hour"
-          },
-          "mappings": [],
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(rate(candor_llm_calls_total{result=\"success\"}[5m])) * 3600",
-          "legendFormat": "Succeeded"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(rate(candor_llm_calls_total{result=\"error\"}[5m])) * 3600",
-          "legendFormat": "Failed"
-        }
-      ]
-    },
-    {
-      "id": 2,
-      "title": "Why the AI was not called",
-      "description": "candor_enrichment_skipped_total. Each is a finding Candor chose not to send to the AI. Nothing new: same content as an earlier analysis. Suppressed: muted by policy. Budget reached: limit hit. AI not configured: no AI provider set up. Shown per hour.",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 23,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "per hour"
-          },
-          "mappings": [],
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"not_needed\"}[5m])) * 3600",
-          "legendFormat": "Nothing new to analyse"
-        },
-        {
-          "refId": "B",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"suppressed\"}[5m])) * 3600",
-          "legendFormat": "Suppressed by policy"
-        },
-        {
-          "refId": "C",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"budget_exhausted\"}[5m])) * 3600",
-          "legendFormat": "Budget reached"
-        },
-        {
-          "refId": "D",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"no_llm_configured\"}[5m])) * 3600",
-          "legendFormat": "AI not configured"
-        }
-      ]
     },
     {
       "id": 5,
@@ -1322,8 +802,8 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 31,
-        "w": 8,
+        "y": 19,
+        "w": 6,
         "h": 6
       },
       "fieldConfig": {
@@ -1358,9 +838,12 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "auto",
+        "textMode": "value",
         "colorMode": "value",
-        "graphMode": "none"
+        "graphMode": "none",
+        "text": {
+          "valueSize": 34
+        }
       },
       "targets": [
         {
@@ -1383,9 +866,9 @@
         "uid": "${DS_PROMETHEUS}"
       },
       "gridPos": {
-        "x": 8,
-        "y": 31,
-        "w": 16,
+        "x": 6,
+        "y": 19,
+        "w": 8,
         "h": 6
       },
       "fieldConfig": {
@@ -1444,6 +927,67 @@
       ]
     },
     {
+      "id": 1,
+      "title": "AI analysis calls",
+      "description": "candor_llm_calls_total. Each call asks the AI to analyse one finding. success: answered. error: the call failed. Shown per hour.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 14,
+        "y": 19,
+        "w": 10,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "per hour",
+            "showPoints": "never",
+            "lineWidth": 1,
+            "fillOpacity": 6
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(candor_llm_calls_total{result=\"success\"}[5m])) * 3600",
+          "legendFormat": "Succeeded"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(candor_llm_calls_total{result=\"error\"}[5m])) * 3600",
+          "legendFormat": "Failed"
+        }
+      ]
+    },
+    {
       "id": 23,
       "title": "Is the tool healthy?",
       "description": "Anything that needs an operator. Green is fine, red needs a look.",
@@ -1451,7 +995,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 37,
+        "y": 25,
         "w": 24,
         "h": 1
       },
@@ -1468,9 +1012,9 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 38,
+        "y": 26,
         "w": 6,
-        "h": 4
+        "h": 3
       },
       "fieldConfig": {
         "defaults": {
@@ -1527,11 +1071,12 @@
         },
         "orientation": "auto",
         "textMode": "value",
-        "colorMode": "background",
+        "colorMode": "value",
         "wideLayout": false,
         "text": {
-          "valueSize": 32
-        }
+          "valueSize": 34
+        },
+        "graphMode": "none"
       },
       "targets": [
         {
@@ -1557,9 +1102,9 @@
       },
       "gridPos": {
         "x": 6,
-        "y": 38,
+        "y": 26,
         "w": 6,
-        "h": 4
+        "h": 3
       },
       "fieldConfig": {
         "defaults": {
@@ -1594,11 +1139,12 @@
         },
         "orientation": "auto",
         "textMode": "value",
-        "colorMode": "background",
+        "colorMode": "value",
         "wideLayout": false,
         "text": {
-          "valueSize": 32
-        }
+          "valueSize": 34
+        },
+        "graphMode": "none"
       },
       "targets": [
         {
@@ -1624,9 +1170,9 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 38,
+        "y": 26,
         "w": 6,
-        "h": 4
+        "h": 3
       },
       "fieldConfig": {
         "defaults": {
@@ -1661,11 +1207,12 @@
         },
         "orientation": "auto",
         "textMode": "value",
-        "colorMode": "background",
+        "colorMode": "value",
         "wideLayout": false,
         "text": {
-          "valueSize": 32
-        }
+          "valueSize": 34
+        },
+        "graphMode": "none"
       },
       "targets": [
         {
@@ -1691,9 +1238,9 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 38,
+        "y": 26,
         "w": 6,
-        "h": 4
+        "h": 3
       },
       "fieldConfig": {
         "defaults": {
@@ -1728,11 +1275,12 @@
         },
         "orientation": "auto",
         "textMode": "value",
-        "colorMode": "background",
+        "colorMode": "value",
         "wideLayout": false,
         "text": {
-          "valueSize": 32
-        }
+          "valueSize": 34
+        },
+        "graphMode": "none"
       },
       "targets": [
         {
@@ -1744,6 +1292,97 @@
           "expr": "floor(sum(increase(candor_pull_requests_total{result=\"error\"}[24h])) or vector(0))",
           "instant": true,
           "range": false
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "title": "Details",
+      "description": "Why the AI was not called, by reason.",
+      "type": "row",
+      "collapsed": true,
+      "gridPos": {
+        "x": 0,
+        "y": 29,
+        "w": 24,
+        "h": 1
+      },
+      "panels": [
+        {
+          "id": 2,
+          "title": "Why the AI was not called",
+          "description": "candor_enrichment_skipped_total. Each is a finding Candor chose not to send to the AI. Nothing new: same content as an earlier analysis. Suppressed: muted by policy. Budget reached: limit hit. AI not configured: no AI provider set up. Shown per hour.",
+          "type": "timeseries",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "gridPos": {
+            "x": 0,
+            "y": 30,
+            "w": 24,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "per hour"
+              },
+              "mappings": [],
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"not_needed\"}[5m])) * 3600",
+              "legendFormat": "Nothing new to analyse"
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"suppressed\"}[5m])) * 3600",
+              "legendFormat": "Suppressed by policy"
+            },
+            {
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"budget_exhausted\"}[5m])) * 3600",
+              "legendFormat": "Budget reached"
+            },
+            {
+              "refId": "D",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"no_llm_configured\"}[5m])) * 3600",
+              "legendFormat": "AI not configured"
+            }
+          ]
         }
       ]
     }

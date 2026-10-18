@@ -47,7 +47,7 @@ def tick():
     while True:
         with lock:
             state["llm_calls"]["success"] += random.choice([0, 0, 1])
-            if random.random() < 0.002:
+            if random.random() < 0.0002:
                 state["llm_calls"]["error"] += 1
             if random.random() < 0.08:
                 state["pull_requests"]["success"] += 1
