@@ -31,9 +31,11 @@ findings = {
 }
 
 state = {
-    "llm_calls": {"success": 42, "error": 1},
+    "llm_calls": {"success": 42, "error": 0},
     "skipped": {"not_needed": 850, "no_llm_configured": 0, "budget_exhausted": 12, "suppressed": 30},
-    "budget_used": {("team-a", "policy"): 8, ("team-b", "policy"): 45},
+    "pull_requests": {"success": 6, "error": 0, "no_mechanical_fix": 9, "budget_exhausted": 0},
+    "webhook_sends": {"success": 20, "error": 0, "dropped": 0},
+    "budget_used": {("team-a", "policy"): 8, ("team-b", "policy"): 22},
     "budget_limit": {("team-a", "policy"): 50, ("team-b", "policy"): 50},
 }
 lock = threading.Lock()
@@ -45,12 +47,21 @@ def tick():
     while True:
         with lock:
             state["llm_calls"]["success"] += random.choice([0, 0, 1])
-            if random.random() < 0.05:
+            if random.random() < 0.002:
                 state["llm_calls"]["error"] += 1
+            if random.random() < 0.08:
+                state["pull_requests"]["success"] += 1
+            if random.random() < 0.001:
+                state["pull_requests"]["error"] += 1
+            state["webhook_sends"]["success"] += random.choice([0, 0, 1])
+            if random.random() < 0.0005:
+                state["webhook_sends"]["error"] += 1
             state["skipped"]["not_needed"] += random.randint(3, 9)
             state["skipped"]["suppressed"] += random.choice([0, 0, 1])
+            # Settles well under the limit, like a budget with headroom, rather than pinning at
+            # 100% - the common state a preview should show. Raise the cap to preview a hit budget.
             state["budget_used"][("team-a", "policy")] = min(
-                50, state["budget_used"][("team-a", "policy")] + random.choice([0, 1])
+                28, state["budget_used"][("team-a", "policy")] + random.choice([0, 1])
             )
 
             for f in findings.values():
@@ -119,6 +130,23 @@ def render():
             lines.append(
                 f'candor_signalpolicy_budget_calls_limit{{namespace="{namespace}",signalpolicy="{policy}"}} {value}'
             )
+
+        lines.append(
+            "# HELP candor_pull_requests_total Total ProposePullRequest decisions following a "
+            "recommendation to act, by result."
+        )
+        lines.append("# TYPE candor_pull_requests_total counter")
+        for result, value in state["pull_requests"].items():
+            lines.append(f'candor_pull_requests_total{{result="{result}"}} {value}')
+
+        lines.append("# HELP candor_webhook_sends_total Total webhook notification/digest sends, by result.")
+        lines.append("# TYPE candor_webhook_sends_total counter")
+        for result, value in state["webhook_sends"].items():
+            lines.append(f'candor_webhook_sends_total{{result="{result}"}} {value}')
+
+        lines.append("# HELP candor_webhook_receiver_up 1 while the webhook signal receiver is running.")
+        lines.append("# TYPE candor_webhook_receiver_up gauge")
+        lines.append("candor_webhook_receiver_up 1")
 
         lines.append(
             "# HELP candor_findings_current Current number of Findings, by namespace, severity, "

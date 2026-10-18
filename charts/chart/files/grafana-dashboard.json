@@ -5,7 +5,7 @@
     "candor"
   ],
   "schemaVersion": 39,
-  "version": 8,
+  "version": 11,
   "refresh": "1m",
   "time": {
     "from": "now-6h",
@@ -59,13 +59,13 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "**Candor** - signal-driven, cost-accountable Kubernetes operator. **Outstanding** (top row below) is what needs attention right now, by severity. **Resolved (7d)** / **Recurred (7d)** are the last week's history - a Finding that recurred was Resolved and came back. \"Cost & Operator Health\" below is Candor's own self-observability, not a finding about your cluster. [Docs](https://github.com/teerakarna/candor) - [Report an issue](https://github.com/teerakarna/candor/issues/new) The **Namespace** filter above applies to Outstanding and Budget Usage only - Resolved/Recurred, Verification Transitions, LLM Calls, and Enrichment Skipped are cluster-wide metrics today, not scoped per namespace."
+        "content": "**Candor** finds security problems in your cluster, works out which ones matter, and opens fix pull requests. This page shows how that is going. **Where we stand**: what is still open right now, by severity, and what was fixed or came back this week. **Is it working?**: findings detected and fixed over time, and the fix pull requests Candor has opened. **What it costs**: how often Candor used the AI, how often it avoided doing so, and how much of each budget is used. **Is the tool healthy?**: anything that needs an operator. Green means fine, red means look. The **Namespace** filter applies to the open-findings counts and the AI budget only; everything else is cluster-wide. [Docs](https://github.com/teerakarna/candor) - [Report an issue](https://github.com/teerakarna/candor/issues/new)"
       }
     },
     {
       "id": 20,
-      "title": "Findings Status",
-      "description": "What needs attention right now, and what's been taken care of, per severity. Outstanding is candor_findings_current, a live count recomputed on every scrape; Resolved and Recurring are 7-day totals.",
+      "title": "Where we stand",
+      "description": "What needs attention right now, and what has been dealt with, per severity. Open is a live count; Fixed and Came back are 7-day totals.",
       "type": "row",
       "collapsed": false,
       "gridPos": {
@@ -140,13 +140,13 @@
           "instant": true,
           "range": false,
           "expr": "sum(candor_findings_current{severity=\"CRITICAL\", outcome!=\"Resolved\", namespace=~\"$namespace\"}) or vector(0)",
-          "legendFormat": "Outstanding"
+          "legendFormat": "Open"
         }
       ]
     },
     {
       "id": 112,
-      "title": "Resolved (7d)",
+      "title": "Fixed (7d)",
       "description": "candor_verification_transitions_total{outcome=\"resolved\",severity=\"CRITICAL\"} over 7 days - taken care of.",
       "type": "stat",
       "datasource": {
@@ -187,7 +187,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -210,7 +210,7 @@
     },
     {
       "id": 113,
-      "title": "Recurred (7d)",
+      "title": "Came back (7d)",
       "description": "candor_verification_transitions_total{outcome=\"recurred\",severity=\"CRITICAL\"} over 7 days - a Finding that was Resolved and came back.",
       "type": "stat",
       "datasource": {
@@ -255,7 +255,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -340,13 +340,13 @@
           "instant": true,
           "range": false,
           "expr": "sum(candor_findings_current{severity=\"HIGH\", outcome!=\"Resolved\", namespace=~\"$namespace\"}) or vector(0)",
-          "legendFormat": "Outstanding"
+          "legendFormat": "Open"
         }
       ]
     },
     {
       "id": 122,
-      "title": "Resolved (7d)",
+      "title": "Fixed (7d)",
       "description": "candor_verification_transitions_total{outcome=\"resolved\",severity=\"HIGH\"} over 7 days - taken care of.",
       "type": "stat",
       "datasource": {
@@ -387,7 +387,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -410,7 +410,7 @@
     },
     {
       "id": 123,
-      "title": "Recurred (7d)",
+      "title": "Came back (7d)",
       "description": "candor_verification_transitions_total{outcome=\"recurred\",severity=\"HIGH\"} over 7 days - a Finding that was Resolved and came back.",
       "type": "stat",
       "datasource": {
@@ -455,7 +455,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -540,13 +540,13 @@
           "instant": true,
           "range": false,
           "expr": "sum(candor_findings_current{severity=\"MEDIUM\", outcome!=\"Resolved\", namespace=~\"$namespace\"}) or vector(0)",
-          "legendFormat": "Outstanding"
+          "legendFormat": "Open"
         }
       ]
     },
     {
       "id": 132,
-      "title": "Resolved (7d)",
+      "title": "Fixed (7d)",
       "description": "candor_verification_transitions_total{outcome=\"resolved\",severity=\"MEDIUM\"} over 7 days - taken care of.",
       "type": "stat",
       "datasource": {
@@ -587,7 +587,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -610,7 +610,7 @@
     },
     {
       "id": 133,
-      "title": "Recurred (7d)",
+      "title": "Came back (7d)",
       "description": "candor_verification_transitions_total{outcome=\"recurred\",severity=\"MEDIUM\"} over 7 days - a Finding that was Resolved and came back.",
       "type": "stat",
       "datasource": {
@@ -655,7 +655,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -740,13 +740,13 @@
           "instant": true,
           "range": false,
           "expr": "sum(candor_findings_current{severity=\"LOW\", outcome!=\"Resolved\", namespace=~\"$namespace\"}) or vector(0)",
-          "legendFormat": "Outstanding"
+          "legendFormat": "Open"
         }
       ]
     },
     {
       "id": 142,
-      "title": "Resolved (7d)",
+      "title": "Fixed (7d)",
       "description": "candor_verification_transitions_total{outcome=\"resolved\",severity=\"LOW\"} over 7 days - taken care of.",
       "type": "stat",
       "datasource": {
@@ -787,7 +787,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -810,7 +810,7 @@
     },
     {
       "id": 143,
-      "title": "Recurred (7d)",
+      "title": "Came back (7d)",
       "description": "candor_verification_transitions_total{outcome=\"recurred\",severity=\"LOW\"} over 7 days - a Finding that was Resolved and came back.",
       "type": "stat",
       "datasource": {
@@ -855,7 +855,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -878,8 +878,8 @@
     },
     {
       "id": 21,
-      "title": "Historical Trends",
-      "description": "Drill-down: how findings status got here, not what it is right now.",
+      "title": "Is it working?",
+      "description": "Findings found and fixed over time, and the fix pull requests Candor has opened.",
       "type": "row",
       "collapsed": false,
       "gridPos": {
@@ -892,8 +892,8 @@
     },
     {
       "id": 3,
-      "title": "Verification Transitions",
-      "description": "candor_verification_transitions_total - how often a Finding's re-checked source turns out resolved, recurred, or still present, over time.",
+      "title": "Findings detected, fixed and came back",
+      "description": "candor_verification_transitions_total. Detected: a finding was first seen or seen again. Fixed: a later re-check no longer found it. Came back: it was fixed and then reappeared. Counts per hour, summed over all severities.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -910,7 +910,9 @@
           "color": {
             "mode": "palette-classic"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "per hour"
+          },
           "mappings": [],
           "unit": "short"
         },
@@ -932,15 +934,33 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(candor_verification_transitions_total[5m])) by (outcome)",
-          "legendFormat": "{{outcome}}"
+          "expr": "sum(rate(candor_verification_transitions_total{outcome=\"still_present\"}[5m])) * 3600",
+          "legendFormat": "Detected"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(candor_verification_transitions_total{outcome=\"resolved\"}[5m])) * 3600",
+          "legendFormat": "Fixed"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(candor_verification_transitions_total{outcome=\"recurred\"}[5m])) * 3600",
+          "legendFormat": "Came back"
         }
       ]
     },
     {
-      "id": 5,
-      "title": "Enrichment Calls Avoided (24h)",
-      "description": "Share of would-be enrichments skipped rather than sent to the LLM - the direct, visible proof of docs/design.md pillar 2.",
+      "id": 6,
+      "title": "Fix pull requests opened (7d)",
+      "description": "candor_pull_requests_total{result=\"success\"} over 7 days. Each one is a proposed fix waiting for a human to review and merge.",
       "type": "stat",
       "datasource": {
         "type": "prometheus",
@@ -949,8 +969,362 @@
       "gridPos": {
         "x": 12,
         "y": 14,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background",
+        "wideLayout": false,
+        "text": {
+          "valueSize": 32
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "floor(sum(increase(candor_pull_requests_total{result=\"success\"}[7d])) or vector(0))",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Fix pull requests that failed (7d)",
+      "description": "candor_pull_requests_total{result=\"error\"} over 7 days. Candor decided to open a pull request but could not. Needs an operator.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 14,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background",
+        "wideLayout": false,
+        "text": {
+          "valueSize": 32
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "floor(sum(increase(candor_pull_requests_total{result=\"error\"}[7d])) or vector(0))",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Fix pull requests by outcome",
+      "description": "candor_pull_requests_total. opened: pull request created. no fix possible: Candor could not produce a concrete change. budget reached: held back by the pull request limit. Shown per hour.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 18,
+        "w": 12,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "per hour"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(candor_pull_requests_total{result=\"success\"}[5m])) * 3600",
+          "legendFormat": "Opened"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(candor_pull_requests_total{result=\"error\"}[5m])) * 3600",
+          "legendFormat": "Failed"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(candor_pull_requests_total{result=\"no_mechanical_fix\"}[5m])) * 3600",
+          "legendFormat": "No fix possible"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(candor_pull_requests_total{result=~\"budget_exhausted|global_budget_exhausted\"}[5m])) * 3600",
+          "legendFormat": "Budget reached"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "title": "What it costs",
+      "description": "How much Candor leans on the AI, and how often it avoids doing so. Token counts are not recorded yet, so calls are the closest measure.",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 1,
+      "title": "AI analysis calls",
+      "description": "candor_llm_calls_total. Each call asks the AI to analyse one finding. success: answered. error: the call failed. Shown per hour.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 23,
         "w": 12,
         "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "per hour"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(candor_llm_calls_total{result=\"success\"}[5m])) * 3600",
+          "legendFormat": "Succeeded"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(candor_llm_calls_total{result=\"error\"}[5m])) * 3600",
+          "legendFormat": "Failed"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Why the AI was not called",
+      "description": "candor_enrichment_skipped_total. Each is a finding Candor chose not to send to the AI. Nothing new: same content as an earlier analysis. Suppressed: muted by policy. Budget reached: limit hit. AI not configured: no AI provider set up. Shown per hour.",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 23,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "per hour"
+          },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"not_needed\"}[5m])) * 3600",
+          "legendFormat": "Nothing new to analyse"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"suppressed\"}[5m])) * 3600",
+          "legendFormat": "Suppressed by policy"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"budget_exhausted\"}[5m])) * 3600",
+          "legendFormat": "Budget reached"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"no_llm_configured\"}[5m])) * 3600",
+          "legendFormat": "AI not configured"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "AI calls avoided (24h)",
+      "description": "Of the findings Candor could have sent to the AI in the last 24h, the share it did not, because nothing had changed, it was suppressed, or a budget was reached. Findings skipped only because no AI is configured are left out. This counts calls, not tokens or money.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 8,
+        "h": 6
       },
       "fieldConfig": {
         "defaults": {
@@ -985,7 +1359,8 @@
         },
         "orientation": "auto",
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "value",
+        "graphMode": "none"
       },
       "targets": [
         {
@@ -994,121 +1369,13 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(increase(candor_enrichment_skipped_total[24h])) / (sum(increase(candor_enrichment_skipped_total[24h])) + sum(increase(candor_llm_calls_total[24h])))"
-        }
-      ]
-    },
-    {
-      "id": 22,
-      "title": "Cost & Operator Health",
-      "description": "Self-observability: what Candor itself is doing, not the findings it's watching.",
-      "type": "row",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 22,
-        "w": 24,
-        "h": 1
-      },
-      "panels": []
-    },
-    {
-      "id": 1,
-      "title": "LLM Calls",
-      "description": "candor_llm_calls_total - the number the whole fingerprint/budget mechanism exists to keep small.",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "x": 0,
-        "y": 23,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {},
-          "mappings": [],
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(rate(candor_llm_calls_total[5m])) by (result)",
-          "legendFormat": "{{result}}"
-        }
-      ]
-    },
-    {
-      "id": 2,
-      "title": "Enrichment Skipped",
-      "description": "candor_enrichment_skipped_total - in steady state this should dominate LLM Calls by a wide margin.",
-      "type": "timeseries",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
-      },
-      "gridPos": {
-        "x": 12,
-        "y": 23,
-        "w": 12,
-        "h": 8
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {},
-          "mappings": [],
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "sum(rate(candor_enrichment_skipped_total[5m])) by (reason)",
-          "legendFormat": "{{reason}}"
+          "expr": "sum(increase(candor_enrichment_skipped_total{reason!=\"no_llm_configured\"}[24h])) / (sum(increase(candor_enrichment_skipped_total{reason!=\"no_llm_configured\"}[24h])) + sum(increase(candor_llm_calls_total[24h])))"
         }
       ]
     },
     {
       "id": 4,
-      "title": "Budget Usage per SignalPolicy",
+      "title": "AI budget used per policy",
       "description": "candor_signalpolicy_budget_calls_used / candor_signalpolicy_budget_calls_limit, per SignalPolicy - how much headroom is left right now, not a trend over time.",
       "type": "gauge",
       "datasource": {
@@ -1116,10 +1383,10 @@
         "uid": "${DS_PROMETHEUS}"
       },
       "gridPos": {
-        "x": 0,
+        "x": 8,
         "y": 31,
-        "w": 24,
-        "h": 8
+        "w": 16,
+        "h": 6
       },
       "fieldConfig": {
         "defaults": {
@@ -1173,6 +1440,310 @@
           "range": false,
           "expr": "candor_signalpolicy_budget_calls_used{namespace=~\"$namespace\"} / candor_signalpolicy_budget_calls_limit{namespace=~\"$namespace\"}",
           "legendFormat": "{{namespace}}/{{signalpolicy}}"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "title": "Is the tool healthy?",
+      "description": "Anything that needs an operator. Green is fine, red needs a look.",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 9,
+      "title": "Webhook receiver",
+      "description": "candor_webhook_receiver_up. Whether the endpoint that receives scanner results is running. Not enabled if it is not turned on.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "Running",
+                  "color": "green"
+                },
+                "0": {
+                  "text": "Down",
+                  "color": "red"
+                },
+                "-1": {
+                  "text": "Not enabled",
+                  "color": "text"
+                }
+              }
+            }
+          ],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": -0.5
+              },
+              {
+                "color": "green",
+                "value": 0.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background",
+        "wideLayout": false,
+        "text": {
+          "valueSize": 32
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "min(candor_webhook_receiver_up) or vector(-1)",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Notifications failed (24h)",
+      "description": "candor_webhook_sends_total with result error or dropped. Alerts and digests that did not reach their destination.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 38,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background",
+        "wideLayout": false,
+        "text": {
+          "valueSize": 32
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "floor(sum(increase(candor_webhook_sends_total{result=~\"error|dropped\"}[24h])) or vector(0))",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "AI call errors (24h)",
+      "description": "candor_llm_calls_total with result error. Findings that could not be analysed.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 38,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background",
+        "wideLayout": false,
+        "text": {
+          "valueSize": 32
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "floor(sum(increase(candor_llm_calls_total{result=\"error\"}[24h])) or vector(0))",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Pull request failures (24h)",
+      "description": "candor_pull_requests_total with result error.",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 38,
+        "w": 6,
+        "h": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background",
+        "wideLayout": false,
+        "text": {
+          "valueSize": 32
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "floor(sum(increase(candor_pull_requests_total{result=\"error\"}[24h])) or vector(0))",
+          "instant": true,
+          "range": false
         }
       ]
     }
