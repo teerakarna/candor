@@ -54,11 +54,12 @@ delivery status. This file adds what's specific to working here as an agent.
 
 ## Merging
 
-`main` is protected, including against the repo owner - no direct push, no force push, even for an
-admin (`enforce_admins: true`), linear history only (squash merge).
+`main` is protected - no direct push, no force push, linear history only (squash merge).
+`enforce_admins` is `false` on purpose, so the owner always has a way past a required check that
+cannot be satisfied (decided 2026-10-01, candor#99).
 
-- **Nine checks must be green**: `lint`, `test` (×3 supported Kubernetes versions), `e2e`,
-  `govulncheck`, `trivy-config`, `gitleaks`, `codeql`. The branch must also be up to date with
+- **Ten checks must be green**: `lint`, `test` (×3 supported Kubernetes versions), `e2e`,
+  `govulncheck`, `trivy-config`, `gitleaks`, `codeql`, `lint-pr-title`. The branch must also be up to date with
   `main` before merging (`strict: true`) - with no merge queue on this repo, merging PR *N* pushes
   every other open PR behind `main` again; expect to re-sync and re-wait on checks when landing
   several in sequence.
