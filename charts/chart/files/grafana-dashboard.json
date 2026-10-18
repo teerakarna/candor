@@ -5,7 +5,7 @@
     "candor"
   ],
   "schemaVersion": 39,
-  "version": 9,
+  "version": 11,
   "refresh": "1m",
   "time": {
     "from": "now-6h",
@@ -187,7 +187,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -255,7 +255,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -387,7 +387,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -455,7 +455,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -587,7 +587,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -655,7 +655,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -787,7 +787,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -855,7 +855,7 @@
           "values": false
         },
         "orientation": "auto",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "colorMode": "background",
         "wideLayout": false,
         "text": {
@@ -893,7 +893,7 @@
     {
       "id": 3,
       "title": "Findings detected, fixed and came back",
-      "description": "candor_verification_transitions_total. Detected: a finding was first seen or seen again. Fixed: a later re-check no longer found it. Came back: it was fixed and then reappeared. Rate per second, summed over all severities.",
+      "description": "candor_verification_transitions_total. Detected: a finding was first seen or seen again. Fixed: a later re-check no longer found it. Came back: it was fixed and then reappeared. Counts per hour, summed over all severities.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -910,7 +910,9 @@
           "color": {
             "mode": "palette-classic"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "per hour"
+          },
           "mappings": [],
           "unit": "short"
         },
@@ -932,7 +934,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(candor_verification_transitions_total{outcome=\"still_present\"}[5m]))",
+          "expr": "sum(rate(candor_verification_transitions_total{outcome=\"still_present\"}[5m])) * 3600",
           "legendFormat": "Detected"
         },
         {
@@ -941,7 +943,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(candor_verification_transitions_total{outcome=\"resolved\"}[5m]))",
+          "expr": "sum(rate(candor_verification_transitions_total{outcome=\"resolved\"}[5m])) * 3600",
           "legendFormat": "Fixed"
         },
         {
@@ -950,7 +952,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(candor_verification_transitions_total{outcome=\"recurred\"}[5m]))",
+          "expr": "sum(rate(candor_verification_transitions_total{outcome=\"recurred\"}[5m])) * 3600",
           "legendFormat": "Came back"
         }
       ]
@@ -1088,7 +1090,7 @@
     {
       "id": 8,
       "title": "Fix pull requests by outcome",
-      "description": "candor_pull_requests_total. opened: pull request created. no fix possible: Candor could not produce a concrete change. budget reached: held back by the pull request limit.",
+      "description": "candor_pull_requests_total. opened: pull request created. no fix possible: Candor could not produce a concrete change. budget reached: held back by the pull request limit. Shown per hour.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1105,7 +1107,9 @@
           "color": {
             "mode": "palette-classic"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "per hour"
+          },
           "mappings": [],
           "unit": "short"
         },
@@ -1127,7 +1131,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(candor_pull_requests_total{result=\"success\"}[5m]))",
+          "expr": "sum(rate(candor_pull_requests_total{result=\"success\"}[5m])) * 3600",
           "legendFormat": "Opened"
         },
         {
@@ -1136,7 +1140,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(candor_pull_requests_total{result=\"error\"}[5m]))",
+          "expr": "sum(rate(candor_pull_requests_total{result=\"error\"}[5m])) * 3600",
           "legendFormat": "Failed"
         },
         {
@@ -1145,7 +1149,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(candor_pull_requests_total{result=\"no_mechanical_fix\"}[5m]))",
+          "expr": "sum(rate(candor_pull_requests_total{result=\"no_mechanical_fix\"}[5m])) * 3600",
           "legendFormat": "No fix possible"
         },
         {
@@ -1154,7 +1158,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(candor_pull_requests_total{result=~\"budget_exhausted|global_budget_exhausted\"}[5m]))",
+          "expr": "sum(rate(candor_pull_requests_total{result=~\"budget_exhausted|global_budget_exhausted\"}[5m])) * 3600",
           "legendFormat": "Budget reached"
         }
       ]
@@ -1176,7 +1180,7 @@
     {
       "id": 1,
       "title": "AI analysis calls",
-      "description": "candor_llm_calls_total. Each call asks the AI to analyse one finding. success: answered. error: the call failed.",
+      "description": "candor_llm_calls_total. Each call asks the AI to analyse one finding. success: answered. error: the call failed. Shown per hour.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1193,7 +1197,9 @@
           "color": {
             "mode": "palette-classic"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "per hour"
+          },
           "mappings": [],
           "unit": "short"
         },
@@ -1215,7 +1221,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(candor_llm_calls_total{result=\"success\"}[5m]))",
+          "expr": "sum(rate(candor_llm_calls_total{result=\"success\"}[5m])) * 3600",
           "legendFormat": "Succeeded"
         },
         {
@@ -1224,7 +1230,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(candor_llm_calls_total{result=\"error\"}[5m]))",
+          "expr": "sum(rate(candor_llm_calls_total{result=\"error\"}[5m])) * 3600",
           "legendFormat": "Failed"
         }
       ]
@@ -1232,7 +1238,7 @@
     {
       "id": 2,
       "title": "Why the AI was not called",
-      "description": "candor_enrichment_skipped_total. Each is a finding Candor chose not to send to the AI. Nothing new: same content as an earlier analysis. Suppressed: muted by policy. Budget reached: limit hit. AI not configured: no AI provider set up.",
+      "description": "candor_enrichment_skipped_total. Each is a finding Candor chose not to send to the AI. Nothing new: same content as an earlier analysis. Suppressed: muted by policy. Budget reached: limit hit. AI not configured: no AI provider set up. Shown per hour.",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
@@ -1249,7 +1255,9 @@
           "color": {
             "mode": "palette-classic"
           },
-          "custom": {},
+          "custom": {
+            "axisLabel": "per hour"
+          },
           "mappings": [],
           "unit": "short"
         },
@@ -1271,7 +1279,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"not_needed\"}[5m]))",
+          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"not_needed\"}[5m])) * 3600",
           "legendFormat": "Nothing new to analyse"
         },
         {
@@ -1280,7 +1288,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"suppressed\"}[5m]))",
+          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"suppressed\"}[5m])) * 3600",
           "legendFormat": "Suppressed by policy"
         },
         {
@@ -1289,7 +1297,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"budget_exhausted\"}[5m]))",
+          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"budget_exhausted\"}[5m])) * 3600",
           "legendFormat": "Budget reached"
         },
         {
@@ -1298,7 +1306,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"no_llm_configured\"}[5m]))",
+          "expr": "sum(rate(candor_enrichment_skipped_total{reason=\"no_llm_configured\"}[5m])) * 3600",
           "legendFormat": "AI not configured"
         }
       ]
@@ -1351,7 +1359,8 @@
         },
         "orientation": "auto",
         "textMode": "auto",
-        "colorMode": "value"
+        "colorMode": "value",
+        "graphMode": "none"
       },
       "targets": [
         {
