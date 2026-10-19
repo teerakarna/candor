@@ -317,11 +317,11 @@ without a cluster.*
 
 It's written for people who need to know how the tool is doing, not only the engineers running it:
 
-- **Where we stand** - open findings by severity, with what was fixed or came back this week.
-- **Is it working?** - findings detected, fixed and came back over time, and how many fix pull
-  requests Candor opened or failed to open.
-- **What it costs** - AI calls made, why the AI was not called, the share of calls avoided, and
-  budget used per policy.
+- **Where we stand** - open findings by severity.
+- **Is it working?** - what was fixed or came back this week, how many fix pull requests Candor
+  opened or failed to open, and findings detected, fixed and came back over time.
+- **What it costs** - AI calls made, the share of calls avoided, and budget used per policy. A
+  collapsed Details row shows why the AI was not called, by reason.
 - **Is the tool healthy?** - receiver running, failed notifications, AI call errors and pull
   request failures, each green or red.
 
