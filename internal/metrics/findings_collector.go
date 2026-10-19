@@ -19,8 +19,30 @@ import (
 var findingsCurrentDesc = prometheus.NewDesc(
 	"candor_findings_current",
 	"Current number of Findings, by namespace, severity, and verification outcome.",
-	[]string{labelNamespace, "severity", "outcome"}, nil,
+	[]string{labelNamespace, labelSeverity, "outcome"}, nil,
 )
+
+// findingPullRequestInfoDesc describes candor_finding_pull_request_info, the metric behind the
+// dashboard's list of fix pull requests to chase. The URL lives only on each Finding's status, so
+// without this the dashboard can count pull requests but not show them. One series per open Finding
+// that has a proposed pull request, value always 1 (an "info" metric). A Finding with no pull
+// request, or one that has since resolved, emits nothing, so series count is bounded by the
+// pull requests actually waiting on a human, not by the number of Findings.
+var findingPullRequestInfoDesc = prometheus.NewDesc(
+	"candor_finding_pull_request_info",
+	"Open Findings that have a proposed fix pull request, carrying the pull request URL. Value is always 1.",
+	[]string{labelNamespace, labelFinding, labelSeverity, labelURL}, nil,
+)
+
+// resolvedOutcome mirrors signal.VerificationResolved. internal/signal imports this package, so
+// it can't be imported back without a cycle.
+const resolvedOutcome = "Resolved"
+
+// labelURL is the label carrying a Finding's proposed pull request URL.
+const labelURL = "url"
+
+// labelFinding is the label carrying a Finding's name.
+const labelFinding = "finding"
 
 // unverifiedOutcome labels a Finding that hasn't been through Ingest's verification-outcome
 // write yet (VerificationOutcome == "") - possible only in the brief window between a Finding's
@@ -40,6 +62,7 @@ type FindingsCollector struct {
 
 func (c *FindingsCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- findingsCurrentDesc
+	ch <- findingPullRequestInfoDesc
 }
 
 // Collect lists every Finding and emits one gauge sample per distinct (namespace, severity,
@@ -65,6 +88,11 @@ func (c *FindingsCollector) Collect(ch chan<- prometheus.Metric) {
 			outcome = unverifiedOutcome
 		}
 		counts[key{f.Namespace, f.Spec.Severity, outcome}]++
+
+		if f.Status.ProposedPullRequestURL != "" && outcome != resolvedOutcome {
+			ch <- prometheus.MustNewConstMetric(findingPullRequestInfoDesc, prometheus.GaugeValue, 1,
+				f.Namespace, f.Name, f.Spec.Severity, f.Status.ProposedPullRequestURL)
+		}
 	}
 
 	for k, v := range counts {
