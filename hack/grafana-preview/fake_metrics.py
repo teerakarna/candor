@@ -152,6 +152,22 @@ def render():
         for result, value in state["pull_requests"].items():
             lines.append(f'candor_pull_requests_total{{result="{result}"}} {value}')
 
+        lines.append(
+            "# HELP candor_finding_pull_request_info Open Findings that have a proposed fix pull "
+            "request, carrying the pull request URL. Value is always 1."
+        )
+        lines.append("# TYPE candor_finding_pull_request_info gauge")
+        pr_number = 100
+        for (namespace, severity), f in findings.items():
+            # Up to two open Findings per group have a pull request waiting, so the list in the
+            # dashboard follows the same simulated open counts as the severity tiles.
+            for i in range(min(f["open"], 2)):
+                pr_number += 1
+                lines.append(
+                    f'candor_finding_pull_request_info{{namespace="{namespace}",finding="{severity.lower()}-{i + 1}",'
+                    f'severity="{severity}",url="https://github.com/example/gitops/pull/{pr_number}"}} 1'
+                )
+
         lines.append("# HELP candor_webhook_sends_total Total webhook notification/digest sends, by result.")
         lines.append("# TYPE candor_webhook_sends_total counter")
         for result, value in state["webhook_sends"].items():

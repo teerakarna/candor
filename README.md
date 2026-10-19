@@ -320,6 +320,8 @@ It's written for people who need to know how the tool is doing, not only the eng
 - **Where we stand** - open findings by severity.
 - **Is it working?** - what was fixed or came back this week, how many fix pull requests Candor
   opened or failed to open, and findings detected, fixed and came back over time.
+- **Fix pull requests to review** - the open fix pull requests as a table, most severe first,
+  each linking to its pull request, so someone can chase the remediation.
 - **What it costs** - AI tokens used (what hosted providers bill by), the share of calls avoided,
   an estimate of the tokens that saved (labelled as an estimate on the dashboard), and budget used
   per policy. A collapsed Details row shows why the AI was not called, by reason.

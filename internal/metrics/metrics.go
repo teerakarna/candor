@@ -14,6 +14,9 @@ import (
 // convention as SignalPolicy itself.
 const labelNamespace = "namespace"
 
+// labelSeverity is shared for the same reason as labelNamespace: three metrics label by severity.
+const labelSeverity = "severity"
+
 // labelResult is shared across every *Total counter keyed by outcome (success|error, or a wider
 // result set) - one constant instead of the literal "result" repeated at each declaration.
 const labelResult = "result"
@@ -76,7 +79,7 @@ var (
 	VerificationTransitionsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "candor_verification_transitions_total",
 		Help: "Total verification outcome transitions recorded while ingesting signals, by outcome (still_present|resolved|recurred) and severity.",
-	}, []string{"outcome", "severity"})
+	}, []string{"outcome", labelSeverity})
 
 	// WebhookSendsTotal counts every internal/notify.SendAsync call, by result. Covers both
 	// immediate Finding notifications (internal/signal.Ingest) and the periodic digest

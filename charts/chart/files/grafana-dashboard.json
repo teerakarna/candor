@@ -5,7 +5,7 @@
     "candor"
   ],
   "schemaVersion": 39,
-  "version": 14,
+  "version": 16,
   "refresh": "1m",
   "time": {
     "from": "now-6h",
@@ -59,7 +59,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "**Candor** finds security problems in your cluster and opens fix pull requests. This page shows how that is going: what is open, whether it is getting fixed, what it costs, and whether the tool itself is healthy. The Namespace filter applies to open findings and AI budget; everything else is cluster-wide. [Docs](https://github.com/teerakarna/candor) - [Report an issue](https://github.com/teerakarna/candor/issues/new)"
+        "content": "**Candor** finds security problems in your cluster and opens fix pull requests. This page shows how that is going: what is open, whether it is getting fixed, what it costs, and whether the tool itself is healthy. The Namespace filter applies to open findings, the fix pull request list and AI budget; everything else is cluster-wide. [Docs](https://github.com/teerakarna/candor) - [Report an issue](https://github.com/teerakarna/candor/issues/new)"
       }
     },
     {
@@ -778,6 +778,175 @@
       ]
     },
     {
+      "id": 25,
+      "title": "Fix pull requests to review",
+      "description": "Open fix pull requests Candor has proposed, for a human to review and merge. Each row is one finding; the link opens its pull request.",
+      "type": "row",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 18,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 26,
+      "title": "Open fix pull requests",
+      "description": "candor_finding_pull_request_info. One row per open finding with a proposed fix pull request, most severe first. A finding drops off the list when it is resolved. Follows the Namespace filter.",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 24,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true
+          },
+          "noValue": "No open fix pull requests",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Pull request"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open pull request",
+                    "url": "${__value.raw}",
+                    "targetBlank": true
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Severity"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Namespace"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Finding"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "rank"
+              }
+            ]
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true,
+              "__name__": true,
+              "job": true,
+              "instance": true,
+              "rank": true,
+              "customresource_group": true,
+              "customresource_kind": true,
+              "customresource_version": true
+            },
+            "renameByName": {
+              "namespace": "Namespace",
+              "finding": "Finding",
+              "severity": "Severity",
+              "url": "Pull request"
+            },
+            "indexByName": {
+              "severity": 0,
+              "namespace": 1,
+              "finding": 2,
+              "url": 3
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "expr": "label_replace(label_replace(label_replace(label_replace(candor_finding_pull_request_info{namespace=~\"$namespace\"}, \"rank\", \"1\", \"severity\", \"CRITICAL\"), \"rank\", \"2\", \"severity\", \"HIGH\"), \"rank\", \"3\", \"severity\", \"MEDIUM\"), \"rank\", \"4\", \"severity\", \"LOW\")"
+        }
+      ]
+    },
+    {
       "id": 22,
       "title": "What it costs",
       "description": "How much Candor leans on the AI, and how often it avoids doing so. Token counts are not recorded yet, so calls are the closest measure.",
@@ -785,7 +954,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 18,
+        "y": 27,
         "w": 24,
         "h": 1
       },
@@ -802,7 +971,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 19,
+        "y": 28,
         "w": 5,
         "h": 6
       },
@@ -867,7 +1036,7 @@
       },
       "gridPos": {
         "x": 5,
-        "y": 19,
+        "y": 28,
         "w": 5,
         "h": 6
       },
@@ -932,7 +1101,7 @@
       },
       "gridPos": {
         "x": 10,
-        "y": 19,
+        "y": 28,
         "w": 6,
         "h": 6
       },
@@ -1002,7 +1171,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 19,
+        "y": 28,
         "w": 8,
         "h": 6
       },
@@ -1060,7 +1229,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 25,
+        "y": 34,
         "w": 24,
         "h": 1
       },
@@ -1077,7 +1246,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 26,
+        "y": 35,
         "w": 6,
         "h": 3
       },
@@ -1167,7 +1336,7 @@
       },
       "gridPos": {
         "x": 6,
-        "y": 26,
+        "y": 35,
         "w": 6,
         "h": 3
       },
@@ -1235,7 +1404,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 26,
+        "y": 35,
         "w": 6,
         "h": 3
       },
@@ -1303,7 +1472,7 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 26,
+        "y": 35,
         "w": 6,
         "h": 3
       },
@@ -1368,7 +1537,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 29,
+        "y": 38,
         "w": 24,
         "h": 1
       },
@@ -1384,7 +1553,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 30,
+            "y": 39,
             "w": 24,
             "h": 8
           },
