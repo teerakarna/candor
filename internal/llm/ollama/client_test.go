@@ -127,3 +127,36 @@ func TestEnrich_MalformedContent_ReturnsError(t *testing.T) {
 		t.Fatal("want an error when the model's content isn't valid JSON, got nil")
 	}
 }
+
+func TestEnrich_ReportsTokenUsage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":"{\"hypotheses\":[]}"},"done":true,"prompt_eval_count":33,"eval_count":20}`))
+	}))
+	defer srv.Close()
+
+	resp, err := New(srv.URL).Enrich(context.Background(), llm.Request{Provider: testProvider, Kind: testKind, Name: testName})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := llm.Usage{Provider: "ollama", InputTokens: 33, OutputTokens: 20}
+	if resp.Usage != want {
+		t.Errorf("Usage = %+v, want %+v", resp.Usage, want)
+	}
+}
+
+func TestEnrich_MissingUsageIsZero(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":"{\"hypotheses\":[]}"}}`))
+	}))
+	defer srv.Close()
+
+	resp, err := New(srv.URL).Enrich(context.Background(), llm.Request{Provider: testProvider, Kind: testKind, Name: testName})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Usage.InputTokens != 0 || resp.Usage.OutputTokens != 0 {
+		t.Errorf("Usage = %+v, want zero counts when the response has no usage fields", resp.Usage)
+	}
+}

@@ -38,9 +38,21 @@ type Hypothesis struct {
 	RecommendedAction string
 }
 
+// Usage is the token count the provider itself reported for one Enrich call. It exists so cost can
+// be measured in the unit providers bill in, not only as a call count: a call with a short prompt
+// and one with a long prompt are the same to candor_llm_calls_total but not to the bill. A provider
+// that reports nothing leaves the counts at zero and nothing is recorded; Provider names where the
+// counts came from, since a self-hosted model's tokens cost nothing and a hosted model's do.
+type Usage struct {
+	Provider     string
+	InputTokens  int
+	OutputTokens int
+}
+
 // Response is one enrichment result.
 type Response struct {
 	Hypotheses []Hypothesis
+	Usage      Usage
 }
 
 // Client enriches a Request into a Response. Implementations own their own retry/backoff

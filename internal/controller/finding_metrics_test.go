@@ -58,3 +58,33 @@ func TestFindingReconciler_Metrics(t *testing.T) {
 		t.Errorf("candor_signalpolicy_budget_calls_limit{namespace=default,signalpolicy=policy} = %v, want 1", got)
 	}
 }
+
+func TestReconcile_RecordsProviderReportedTokens(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := candorv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	f := newTestFinding("tok1")
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(f, testPolicy(5)).
+		WithStatusSubresource(&candorv1alpha1.Finding{}, &candorv1alpha1.SignalPolicy{}).Build()
+
+	fakeLLM := &countingLLM{resp: llm.Response{
+		Hypotheses: []llm.Hypothesis{{Cause: "x", Confidence: 0.5}},
+		Usage:      llm.Usage{Provider: "test-ctrl", InputTokens: 300, OutputTokens: 70},
+	}}
+	r := &FindingReconciler{Client: c, Scheme: scheme, LLM: fakeLLM, Recorder: record.NewFakeRecorder(10)}
+
+	beforeIn := testutil.ToFloat64(metrics.LLMTokensTotal.WithLabelValues("test-ctrl", metrics.DirectionInput))
+	beforeOut := testutil.ToFloat64(metrics.LLMTokensTotal.WithLabelValues("test-ctrl", metrics.DirectionOutput))
+
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: namespacedName(f)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := testutil.ToFloat64(metrics.LLMTokensTotal.WithLabelValues("test-ctrl", metrics.DirectionInput)) - beforeIn; got != 300 {
+		t.Errorf("input tokens increased by %v, want 300", got)
+	}
+	if got := testutil.ToFloat64(metrics.LLMTokensTotal.WithLabelValues("test-ctrl", metrics.DirectionOutput)) - beforeOut; got != 70 {
+		t.Errorf("output tokens increased by %v, want 70", got)
+	}
+}

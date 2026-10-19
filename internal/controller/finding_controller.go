@@ -193,6 +193,7 @@ func (r *FindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 			return ctrl.Result{}, err
 		}
 		metrics.LLMCallsTotal.WithLabelValues("success").Inc()
+		metrics.RecordLLMTokens(resp.Usage.Provider, resp.Usage.InputTokens, resp.Usage.OutputTokens)
 
 		finding.Status.Hypotheses = toHypotheses(resp.Hypotheses)
 		finding.Status.EnrichedFingerprint = finding.Status.Fingerprint

@@ -148,7 +148,15 @@ type chatMessage struct {
 type chatResponse struct {
 	Message chatMessage `json:"message"`
 	Error   string      `json:"error,omitempty"`
+
+	// PromptEvalCount and EvalCount are Ollama's input and output token counts on a non-streaming
+	// /api/chat response. A field the server omits decodes as 0 and is simply not counted.
+	PromptEvalCount int `json:"prompt_eval_count"`
+	EvalCount       int `json:"eval_count"`
 }
+
+// providerName labels this backend in llm.Usage, and so in candor_llm_tokens_total.
+const providerName = "ollama"
 
 type hypothesesPayload struct {
 	Hypotheses []struct {
@@ -218,7 +226,10 @@ func (c *Client) Enrich(ctx context.Context, req llm.Request) (llm.Response, err
 		})
 	}
 
-	return llm.Response{Hypotheses: hypotheses}, nil
+	return llm.Response{
+		Hypotheses: hypotheses,
+		Usage:      llm.Usage{Provider: providerName, InputTokens: resp.PromptEvalCount, OutputTokens: resp.EvalCount},
+	}, nil
 }
 
 // buildPrompt renders req into a prompt - identical framing to internal/llm/anthropic's, since the
