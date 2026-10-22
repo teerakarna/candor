@@ -26,6 +26,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,10 +64,25 @@ func run() error {
 		return fmt.Errorf("no backend configured - set ANTHROPIC_API_KEY and/or CANDOR_OLLAMA_HOST, see hack/eval/README.md")
 	}
 
+	runs, err := evalRuns()
+	if err != nil {
+		return err
+	}
+
 	ctx := context.Background()
 	var reports []string
 	for _, b := range backends {
-		reports = append(reports, Report(b.name, runFixtures(ctx, b.client)))
+		summaries := make([]RunSummary, 0, runs)
+		for range runs {
+			start := time.Now()
+			results := runFixtures(ctx, b.client)
+			summaries = append(summaries, RunSummary{Results: results, Elapsed: time.Since(start)})
+		}
+		if runs == 1 {
+			reports = append(reports, Report(b.name, summaries[0].Results))
+		} else {
+			reports = append(reports, ReportRuns(b.name, summaries))
+		}
 	}
 
 	combined := strings.Join(reports, "\n")
@@ -91,19 +107,50 @@ func configuredBackends() []namedBackend {
 	}
 
 	if host := os.Getenv("CANDOR_OLLAMA_HOST"); host != "" {
-		model := ollama.DefaultModel
-		var opts []ollama.Option
-		if m := os.Getenv("CANDOR_LLM_MODEL"); m != "" {
-			model = m
-			opts = append(opts, ollama.WithModel(m))
+		for _, model := range ollamaModels() {
+			var opts []ollama.Option
+			if model != ollama.DefaultModel {
+				opts = append(opts, ollama.WithModel(model))
+			}
+			backends = append(backends, namedBackend{
+				name:   "ollama:" + model,
+				client: ollama.New(host, opts...),
+			})
 		}
-		backends = append(backends, namedBackend{
-			name:   "ollama:" + model,
-			client: ollama.New(host, opts...),
-		})
 	}
 
 	return backends
+}
+
+// ollamaModels returns the Ollama models to run. CANDOR_LLM_MODEL may hold a single model or a
+// comma-separated list, one backend per model, so several candidates can be compared in one run;
+// unset means the default model, exactly as before.
+func ollamaModels() []string {
+	var models []string
+	for m := range strings.SplitSeq(os.Getenv("CANDOR_LLM_MODEL"), ",") {
+		if m = strings.TrimSpace(m); m != "" {
+			models = append(models, m)
+		}
+	}
+	if len(models) == 0 {
+		return []string{ollama.DefaultModel}
+	}
+	return models
+}
+
+// evalRuns reads CANDOR_EVAL_RUNS, how many times each backend runs the whole fixture suite.
+// Default 1, which keeps the original single-run report. More than one is for comparing models:
+// model output is not deterministic and eight fixtures is a small sample, so one run proves little.
+func evalRuns() (int, error) {
+	v := os.Getenv("CANDOR_EVAL_RUNS")
+	if v == "" {
+		return 1, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return 0, fmt.Errorf("CANDOR_EVAL_RUNS must be a whole number of at least 1, got %q", v)
+	}
+	return n, nil
 }
 
 func runFixtures(ctx context.Context, client llm.Client) []Result {
