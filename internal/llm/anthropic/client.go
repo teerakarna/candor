@@ -106,6 +106,9 @@ var hypothesesSchema = map[string]any{
 	"additionalProperties": false,
 }
 
+// providerName labels this backend in llm.Usage, and so in candor_llm_tokens_total.
+const providerName = "anthropic"
+
 type messagesRequest struct {
 	Model        string           `json:"model"`
 	MaxTokens    int              `json:"max_tokens"`
@@ -129,7 +132,15 @@ type outputFormat struct {
 
 type messagesResponse struct {
 	Content []contentBlock `json:"content"`
+	Usage   usage          `json:"usage"`
 	Error   *apiError      `json:"error,omitempty"`
+}
+
+// usage is the token count Anthropic reports on every non-streaming Messages response
+// (https://platform.claude.com/docs/en/build-with-claude/working-with-messages).
+type usage struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
 }
 
 type contentBlock struct {
@@ -218,7 +229,10 @@ func (c *Client) Enrich(ctx context.Context, req llm.Request) (llm.Response, err
 		})
 	}
 
-	return llm.Response{Hypotheses: hypotheses}, nil
+	return llm.Response{
+		Hypotheses: hypotheses,
+		Usage:      llm.Usage{Provider: providerName, InputTokens: resp.Usage.InputTokens, OutputTokens: resp.Usage.OutputTokens},
+	}, nil
 }
 
 // buildPrompt renders req into a prompt. req's fields (Summary especially - it originates from a

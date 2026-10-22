@@ -11,7 +11,7 @@ Three services:
   `candor_enrichment_skipped_total`, `candor_verification_transitions_total`,
   `candor_signalpolicy_budget_calls_used`/`_limit`, `candor_findings_current`,
   `candor_finding_pull_request_info`, `candor_pull_requests_total`, `candor_webhook_sends_total`,
-  `candor_webhook_receiver_up`).
+  `candor_webhook_receiver_up`, `candor_llm_tokens_total`).
   Values drift a little every few seconds so the dashboard's timeseries panels actually move.
 - **prometheus** - scrapes fake-metrics every 5s.
 - **grafana** - both the Prometheus datasource and the dashboard itself are auto-provisioned

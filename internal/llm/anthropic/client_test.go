@@ -125,3 +125,36 @@ func TestEnrich_MalformedResponse(t *testing.T) {
 		t.Fatal("expected an error when the structured output isn't valid JSON")
 	}
 }
+
+func TestEnrich_ReportsTokenUsage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"{\"hypotheses\":[]}"}],"usage":{"input_tokens":412,"output_tokens":87}}`))
+	}))
+	defer srv.Close()
+
+	resp, err := New("k", WithBaseURL(srv.URL)).Enrich(context.Background(), llm.Request{Provider: testProvider, Kind: testKind, Name: testName})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := llm.Usage{Provider: "anthropic", InputTokens: 412, OutputTokens: 87}
+	if resp.Usage != want {
+		t.Errorf("Usage = %+v, want %+v", resp.Usage, want)
+	}
+}
+
+func TestEnrich_MissingUsageIsZero(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"{\"hypotheses\":[]}"}]}`))
+	}))
+	defer srv.Close()
+
+	resp, err := New("k", WithBaseURL(srv.URL)).Enrich(context.Background(), llm.Request{Provider: testProvider, Kind: testKind, Name: testName})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Usage.InputTokens != 0 || resp.Usage.OutputTokens != 0 {
+		t.Errorf("Usage = %+v, want zero counts when the response has no usage", resp.Usage)
+	}
+}

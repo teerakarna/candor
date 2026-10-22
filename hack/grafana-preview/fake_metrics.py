@@ -33,6 +33,7 @@ findings = {
 state = {
     "llm_calls": {"success": 42, "error": 0},
     "skipped": {"not_needed": 850, "no_llm_configured": 0, "budget_exhausted": 12, "suppressed": 30},
+    "tokens": {"input": 37800, "output": 9200},
     "pull_requests": {"success": 6, "error": 0, "no_mechanical_fix": 9, "budget_exhausted": 0},
     "webhook_sends": {"success": 20, "error": 0, "dropped": 0},
     "budget_used": {("team-a", "policy"): 8, ("team-b", "policy"): 22},
@@ -46,7 +47,11 @@ def tick():
     dashboard show real movement instead of a flat line."""
     while True:
         with lock:
-            state["llm_calls"]["success"] += random.choice([0, 0, 1])
+            new_calls = random.choice([0, 0, 1])
+            state["llm_calls"]["success"] += new_calls
+            for _ in range(new_calls):
+                state["tokens"]["input"] += random.randint(700, 1100)
+                state["tokens"]["output"] += random.randint(150, 300)
             if random.random() < 0.0002:
                 state["llm_calls"]["error"] += 1
             if random.random() < 0.08:
@@ -91,6 +96,14 @@ def render():
         lines.append("# TYPE candor_llm_calls_total counter")
         for result, value in state["llm_calls"].items():
             lines.append(f'candor_llm_calls_total{{result="{result}"}} {value}')
+
+        lines.append(
+            "# HELP candor_llm_tokens_total Total tokens used by LLM enrichment calls, as reported by "
+            "the provider, by provider and direction (input|output)."
+        )
+        lines.append("# TYPE candor_llm_tokens_total counter")
+        for direction, value in state["tokens"].items():
+            lines.append(f'candor_llm_tokens_total{{provider="anthropic",direction="{direction}"}} {value}')
 
         lines.append(
             "# HELP candor_enrichment_skipped_total Total times enrichment was skipped without "

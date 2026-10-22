@@ -30,6 +30,16 @@ var (
 		Help: "Total LLM enrichment calls made, by result (success|error).",
 	}, []string{labelResult})
 
+	// LLMTokensTotal counts the tokens LLM calls actually used, as reported by the provider, by
+	// provider and direction (input|output). A call count says how often Candor leaned on the AI;
+	// tokens are what hosted providers bill by, so this is the closest measure of cost the operator
+	// can publish without knowing anyone's price. Counted only on a successful call, and only when
+	// the provider reported a count.
+	LLMTokensTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "candor_llm_tokens_total",
+		Help: "Total tokens used by LLM enrichment calls, as reported by the provider, by provider and direction (input|output).",
+	}, []string{"provider", "direction"})
+
 	// EnrichmentSkippedTotal counts every time a Finding was NOT sent to the LLM, by reason. In
 	// steady state (unchanged content) this should dominate LLMCallsTotal by a wide margin - that
 	// ratio is the direct, visible proof of docs/design.md pillar 2.
@@ -93,7 +103,28 @@ var (
 	})
 )
 
+// Token directions for LLMTokensTotal's "direction" label.
+const (
+	DirectionInput  = "input"
+	DirectionOutput = "output"
+)
+
+// RecordLLMTokens adds a provider-reported token count to LLMTokensTotal. A zero count, or an
+// unnamed provider, records nothing, so a backend that reports no usage leaves the counter
+// untouched rather than creating a misleading flat zero series.
+func RecordLLMTokens(provider string, input, output int) {
+	if provider == "" {
+		return
+	}
+	if input > 0 {
+		LLMTokensTotal.WithLabelValues(provider, DirectionInput).Add(float64(input))
+	}
+	if output > 0 {
+		LLMTokensTotal.WithLabelValues(provider, DirectionOutput).Add(float64(output))
+	}
+}
+
 func init() {
-	metrics.Registry.MustRegister(LLMCallsTotal, EnrichmentSkippedTotal, BudgetCallsUsed, BudgetCallsLimit,
+	metrics.Registry.MustRegister(LLMCallsTotal, LLMTokensTotal, EnrichmentSkippedTotal, BudgetCallsUsed, BudgetCallsLimit,
 		VerificationTransitionsTotal, WebhookSendsTotal, PullRequestsTotal, WebhookReceiverUp)
 }
