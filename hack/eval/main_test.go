@@ -84,3 +84,43 @@ func TestConfiguredBackends_CustomOllamaModelIsReflectedInName(t *testing.T) {
 		t.Errorf("configuredBackends() = %v, want a single ollama:qwen2.5:7b backend", got)
 	}
 }
+
+func TestConfiguredBackends_CommaSeparatedModelsMakeOneBackendEach(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("CANDOR_OLLAMA_HOST", "http://localhost:11434")
+	t.Setenv("CANDOR_LLM_MODEL", "qwen2.5:7b, gemma3:4b ,,llama3.1:8b")
+
+	got := configuredBackends()
+
+	want := []string{"ollama:qwen2.5:7b", "ollama:gemma3:4b", "ollama:llama3.1:8b"}
+	if len(got) != len(want) {
+		t.Fatalf("configuredBackends() returned %d backends, want %d: %v", len(got), len(want), got)
+	}
+	for i, w := range want {
+		if got[i].name != w {
+			t.Errorf("backend %d = %q, want %q", i, got[i].name, w)
+		}
+	}
+}
+
+func TestEvalRuns(t *testing.T) {
+	cases := []struct {
+		env     string
+		want    int
+		wantErr bool
+	}{
+		{"", 1, false},
+		{"1", 1, false},
+		{"5", 5, false},
+		{"0", 0, true},
+		{"-2", 0, true},
+		{"three", 0, true},
+	}
+	for _, c := range cases {
+		t.Setenv("CANDOR_EVAL_RUNS", c.env)
+		got, err := evalRuns()
+		if (err != nil) != c.wantErr || got != c.want {
+			t.Errorf("CANDOR_EVAL_RUNS=%q: got (%d, %v), want (%d, error=%v)", c.env, got, err, c.want, c.wantErr)
+		}
+	}
+}

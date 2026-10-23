@@ -35,7 +35,20 @@ Running with only `ANTHROPIC_API_KEY` set behaves exactly as it did before #107 
 section in the report. `CANDOR_OLLAMA_HOST` must be set explicitly; there's no silent attempt
 against `localhost:11434` for a run that only wanted the hosted baseline. `CANDOR_LLM_MODEL`
 overrides the Ollama candidate model (default `llama3.2:3b`, matching the model issue #52 already
-verified grammar-constrained output against).
+verified grammar-constrained output against). It also takes a comma-separated list, for example
+`CANDOR_LLM_MODEL=llama3.2:3b,qwen2.5:7b`, which runs each model as its own backend and gives each
+its own section in the report.
+
+`CANDOR_EVAL_RUNS` (default 1) repeats the whole fixture suite per backend. Output is
+non-deterministic, so one run is a sample, not a measurement: with more than one run the report
+shows the mean and range, errored calls, tokens and wall time per run, and per-fixture pass counts.
+Two things to know when reading it:
+
+- A call that errors (timeout, bad JSON, model would not load) counts as a failure in the accuracy
+  figures, and is also counted separately under "Errored calls". Check that line before reading a
+  low score as low quality.
+- The setting applies to every backend, including Anthropic. With `ANTHROPIC_API_KEY` set,
+  `CANDOR_EVAL_RUNS=5` spends five times the credits, so unset the key when comparing local models.
 
 Prints the report and writes it to `report.md` in this directory. Commit the refreshed
 `report.md` when you want the published numbers to reflect a new run (a new fixture, a model
