@@ -20,6 +20,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	candorv1alpha1 "github.com/teerakarna/candor/api/v1alpha1"
 	"github.com/teerakarna/candor/internal/llm"
@@ -126,5 +127,48 @@ func TestReport_CountsAndFailuresAreVisible(t *testing.T) {
 	}
 	if !strings.Contains(report, "timeout") {
 		t.Errorf("report does not surface the fixture's error:\n%s", report)
+	}
+}
+
+// runOf builds a RunSummary over the real fixture list where the first actionPasses fixtures
+// score correct on action, and every fixture reports the given tokens.
+func runOf(actionPasses int, in, out int, elapsed time.Duration) RunSummary {
+	results := make([]Result, len(Fixtures))
+	for i, f := range Fixtures {
+		results[i] = Result{Fixture: f, ActionCorrect: i < actionPasses,
+			Response: llm.Response{Usage: llm.Usage{Provider: "ollama", InputTokens: in, OutputTokens: out}}}
+	}
+	return RunSummary{Results: results, Elapsed: elapsed}
+}
+
+func TestReportRuns_ShowsSpreadErrorsTokensAndPerFixturePasses(t *testing.T) {
+	all, half := len(Fixtures), len(Fixtures)/2
+	r1 := runOf(all, 100, 40, 2*time.Minute)
+	r2 := runOf(half, 200, 60, 4*time.Minute)
+	r2.Results[0].Err = errors.New("timeout")
+	r2.Results[0].ActionCorrect = false // what Score does for an errored call
+
+	report := ReportRuns("ollama:test", []RunSummary{r1, r2})
+
+	for _, want := range []string{
+		"(2 runs)",
+		"Action accuracy: 69% mean (38% to 100%) over 2 runs",
+		"Errored calls: 1 of 16",
+		"1200 input and 400 output tokens", // per-run totals across the fixtures, averaged over runs
+		"3m0s wall time",
+	} {
+		if !strings.Contains(report, want) {
+			t.Errorf("report missing %q:\n%s", want, report)
+		}
+	}
+	// The first fixture passed action in run 1 only: run 2's call for it errored.
+	if !strings.Contains(report, "| "+Fixtures[0].Name+" | 1/2 |") {
+		t.Errorf("report missing per-fixture pass count for %s:\n%s", Fixtures[0].Name, report)
+	}
+}
+
+func TestReportRuns_NoRuns(t *testing.T) {
+	if got := ReportRuns("m", nil); !strings.Contains(got, "No runs") {
+		t.Errorf("ReportRuns with no runs = %q, want a No runs note", got)
 	}
 }

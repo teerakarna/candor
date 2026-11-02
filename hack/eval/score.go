@@ -19,6 +19,7 @@ package main
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/teerakarna/candor/internal/llm"
 )
@@ -104,4 +105,109 @@ func errText(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// RunSummary is one full pass of the fixture suite against one backend, with what it cost to get:
+// wall time, and the tokens the provider reported (zero for a backend that reports none).
+type RunSummary struct {
+	Results []Result
+	Elapsed time.Duration
+}
+
+func (s RunSummary) accuracy() (action, cause float64) {
+	actionN, causeN := 0, 0
+	for _, r := range s.Results {
+		if r.ActionCorrect {
+			actionN++
+		}
+		if r.CauseCorrect {
+			causeN++
+		}
+	}
+	return pct(actionN, len(s.Results)), pct(causeN, len(s.Results))
+}
+
+func (s RunSummary) errors() int {
+	n := 0
+	for _, r := range s.Results {
+		if r.Err != nil {
+			n++
+		}
+	}
+	return n
+}
+
+func (s RunSummary) tokens() (in, out int) {
+	for _, r := range s.Results {
+		in += r.Response.Usage.InputTokens
+		out += r.Response.Usage.OutputTokens
+	}
+	return in, out
+}
+
+// ReportRuns renders several runs of the same backend. One run of eight fixtures is a very small
+// sample from a non-deterministic model, so a single accuracy figure can mislead in either
+// direction; showing the spread across runs, and how many calls errored outright (a model that
+// does not fit in memory shows up as errors, not as a low score), is what makes a comparison
+// between models worth reading.
+func ReportRuns(model string, runs []RunSummary) string {
+	n := len(runs)
+	if n == 0 {
+		return fmt.Sprintf("# Fixture suite results - %s\n\nNo runs.\n", model)
+	}
+
+	var actions, causes []float64
+	var totalErrors, totalCalls, totalIn, totalOut int
+	var totalElapsed time.Duration
+	for _, r := range runs {
+		a, c := r.accuracy()
+		actions = append(actions, a)
+		causes = append(causes, c)
+		totalErrors += r.errors()
+		totalCalls += len(r.Results)
+		in, out := r.tokens()
+		totalIn += in
+		totalOut += out
+		totalElapsed += r.Elapsed
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "# Fixture suite results - %s (%d runs)\n\n", model, n)
+	fmt.Fprintf(&b, "Action accuracy: %s\n\n", spread(actions))
+	fmt.Fprintf(&b, "Cause accuracy: %s\n\n", spread(causes))
+	fmt.Fprintf(&b, "Errored calls: %d of %d\n\n", totalErrors, totalCalls)
+	fmt.Fprintf(&b, "Per run, on average: %d input and %d output tokens, %s wall time\n\n",
+		totalIn/n, totalOut/n, (totalElapsed / time.Duration(n)).Round(time.Second))
+
+	b.WriteString("| Fixture | Action (passes) | Cause (passes) |\n|---|---|---|\n")
+	for i, f := range Fixtures {
+		actionN, causeN := 0, 0
+		for _, r := range runs {
+			if i < len(r.Results) {
+				if r.Results[i].ActionCorrect {
+					actionN++
+				}
+				if r.Results[i].CauseCorrect {
+					causeN++
+				}
+			}
+		}
+		fmt.Fprintf(&b, "| %s | %d/%d | %d/%d |\n", f.Name, actionN, n, causeN, n)
+	}
+	return b.String()
+}
+
+// spread formats a series of per-run percentages as "mean (min to max)".
+func spread(vals []float64) string {
+	lo, hi, sum := vals[0], vals[0], 0.0
+	for _, v := range vals {
+		sum += v
+		if v < lo {
+			lo = v
+		}
+		if v > hi {
+			hi = v
+		}
+	}
+	return fmt.Sprintf("%.0f%% mean (%.0f%% to %.0f%%) over %d runs", sum/float64(len(vals)), lo, hi, len(vals))
 }
