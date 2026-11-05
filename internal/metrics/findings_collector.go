@@ -50,13 +50,23 @@ const labelFinding = "finding"
 // dropped, so a scrape during that window doesn't undercount.
 const unverifiedOutcome = "Unverified"
 
-// otherKind labels a Finding whose resource kind is not in knownKinds.
-const otherKind = "other"
+// otherLabel is reported for a provider or kind outside the fixed sets below.
+const otherLabel = "other"
 
-// knownKinds is the closed set of resource kinds reported as the kind label. Spec.Source.Kind is
-// free text for the webhook provider (the caller's payload, only checked for non-empty), so using
-// it directly would let a caller mint unbounded series. Anything outside this set is reported as
-// otherKind. Extend the set when a provider starts producing a kind worth its own series.
+// trivyProvider is the one provider whose kind is passed through as-is: the Trivy translator
+// reads it from the scanned workload, so it is as bounded as the cluster's own workload kinds
+// (including CRD-backed ones such as Rollout) and an allowlist would only hide real data.
+const trivyProvider = "trivy"
+
+// knownProviders is the closed set reported as the provider label. Spec.Source.Provider is free
+// text on the CRD, so anything outside this set is reported as otherLabel rather than minting a
+// series per value. Add a provider here when it ships.
+var knownProviders = map[string]bool{trivyProvider: true, "webhook": true}
+
+// knownKinds is the closed set of kinds reported for every provider except Trivy.
+// Spec.Source.Kind is the caller's payload for the webhook provider (only checked for non-empty),
+// so using it directly would let a caller mint unbounded series. Extend the set when a provider
+// starts producing a kind worth its own series.
 var knownKinds = map[string]bool{
 	"Pod": true, "Deployment": true, "StatefulSet": true, "DaemonSet": true, "ReplicaSet": true,
 	"ReplicationController": true, "Job": true, "CronJob": true, "Service": true, "Ingress": true,
@@ -64,11 +74,21 @@ var knownKinds = map[string]bool{
 	"Role": true, "ClusterRole": true, "RoleBinding": true, "ClusterRoleBinding": true,
 }
 
-func boundedKind(kind string) string {
+func boundedProvider(provider string) string {
+	if knownProviders[provider] {
+		return provider
+	}
+	return otherLabel
+}
+
+func boundedKind(provider, kind string) string {
+	if provider == trivyProvider && kind != "" {
+		return kind
+	}
 	if knownKinds[kind] {
 		return kind
 	}
-	return otherKind
+	return otherLabel
 }
 
 // FindingsCollector is a Prometheus collector (not a package-level metric var like the rest of
@@ -87,8 +107,8 @@ func (c *FindingsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 // Collect lists every Finding and emits one gauge sample per distinct (namespace, severity,
-// outcome, provider, kind) combination actually present - not one per possible combination, so a combination
-// with zero Findings simply doesn't appear, rather than reporting a bare 0 (Prometheus and
+// outcome, provider, kind) combination actually present - not one per possible combination, so a
+// combination with zero Findings simply doesn't appear, rather than reporting a bare 0 (Prometheus and
 // Grafana's `sum(...)  or vector(0)` pattern handle an absent series the same way as an explicit
 // zero for this dashboard's purposes).
 //
@@ -108,7 +128,7 @@ func (c *FindingsCollector) Collect(ch chan<- prometheus.Metric) {
 		if outcome == "" {
 			outcome = unverifiedOutcome
 		}
-		counts[key{f.Namespace, f.Spec.Severity, outcome, f.Spec.Source.Provider, boundedKind(f.Spec.Source.Kind)}]++
+		counts[key{f.Namespace, f.Spec.Severity, outcome, boundedProvider(f.Spec.Source.Provider), boundedKind(f.Spec.Source.Provider, f.Spec.Source.Kind)}]++
 
 		if f.Status.ProposedPullRequestURL != "" && outcome != resolvedOutcome {
 			ch <- prometheus.MustNewConstMetric(findingPullRequestInfoDesc, prometheus.GaugeValue, 1,

@@ -411,7 +411,7 @@
           },
           "instant": true,
           "range": false,
-          "expr": "sum by (provider) (candor_findings_current{outcome!=\"Resolved\", namespace=~\"$namespace\"})",
+          "expr": "sort_desc(sum by (provider) (candor_findings_current{outcome!=\"Resolved\", namespace=~\"$namespace\"}))",
           "legendFormat": "{{provider}}"
         }
       ]
@@ -475,7 +475,7 @@
           },
           "instant": true,
           "range": false,
-          "expr": "sum by (kind) (candor_findings_current{outcome!=\"Resolved\", namespace=~\"$namespace\"})",
+          "expr": "sort_desc(sum by (kind) (candor_findings_current{outcome!=\"Resolved\", namespace=~\"$namespace\"}))",
           "legendFormat": "{{kind}}"
         }
       ]

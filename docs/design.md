@@ -301,6 +301,10 @@ budget explicitly, or it is not a solution.
    operator actually opens the dashboard for - what needs attention, right now. Fixing that
    exposed a real gap: none of the existing metrics represent a live current count of Findings by
    severity, only transition counters. Added `candor_findings_current{namespace,severity,outcome,provider,kind}`
+   (`provider` and `kind` are bounded: unknown providers, and kinds from sources other than Trivy that
+   are not in a fixed list, report as `other`, because the webhook provider takes `kind` from the
+   caller's payload; adding them changed the series identity, so a query that matched this metric
+   without `sum by` needs a second look)
    as a Prometheus `Collector` (`internal/metrics.FindingsCollector`) - computed fresh from the
    manager's cached client on every scrape, the same reasoning kube-state-metrics is built on,
    since a plain counter can't correctly express "how many are open right now" (transitions don't

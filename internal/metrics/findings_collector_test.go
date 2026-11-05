@@ -16,13 +16,18 @@ const (
 	nsTeamA     = "team-a"
 
 	findingsCurrentName = "candor_findings_current"
+
+	providerWebhook = "webhook"
+	kindDeployment  = "Deployment"
+	kindRollout     = "Rollout"
+	kindPod         = "Pod"
 )
 
 func finding(namespace, name, severity, outcome string) *candorv1alpha1.Finding {
 	return &candorv1alpha1.Finding{
 		Name: name, Namespace: namespace,
 		Spec: candorv1alpha1.FindingSpec{
-			Source:   candorv1alpha1.FindingSource{Provider: "trivy", Kind: "Deployment", Name: "api", RefKind: "VulnerabilityReport", RefName: "api"},
+			Source:   candorv1alpha1.FindingSource{Provider: trivyProvider, Kind: kindDeployment, Name: "api", RefKind: "VulnerabilityReport", RefName: "api"},
 			Severity: severity,
 			Summary:  "test",
 		},
@@ -232,7 +237,7 @@ func TestFindingsCollector_ProviderAndKindLabels_KindIsBounded(t *testing.T) {
 		t.Fatal(err)
 	}
 	custom := finding(nsTeamA, "f2", sevCritical, "StillPresent")
-	custom.Spec.Source.Provider = "webhook"
+	custom.Spec.Source.Provider = providerWebhook
 	custom.Spec.Source.Kind = "SomeCallerInvention"
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
 		finding(nsTeamA, "f1", sevCritical, "StillPresent"),
@@ -260,13 +265,37 @@ func TestFindingsCollector_ProviderAndKindLabels_KindIsBounded(t *testing.T) {
 			got[labels["provider"]+"/"+labels["kind"]] = m.GetGauge().GetValue()
 		}
 	}
-	want := map[string]float64{"trivy/Deployment": 1, "webhook/" + otherKind: 1}
+	want := map[string]float64{"trivy/Deployment": 1, "webhook/" + otherLabel: 1}
 	if len(got) != len(want) {
 		t.Fatalf("got series %v, want %v", got, want)
 	}
 	for k, v := range want {
 		if got[k] != v {
 			t.Errorf("series %q = %v, want %v (all: %v)", k, got[k], v, got)
+		}
+	}
+}
+
+func TestBoundedLabels(t *testing.T) {
+	cases := []struct {
+		provider, kind         string
+		wantProvider, wantKind string
+	}{
+		{trivyProvider, kindDeployment, trivyProvider, kindDeployment},
+		{trivyProvider, kindRollout, trivyProvider, kindRollout},
+		{trivyProvider, "", trivyProvider, otherLabel},
+		{providerWebhook, kindPod, providerWebhook, kindPod},
+		{providerWebhook, kindRollout, providerWebhook, otherLabel},
+		{providerWebhook, "", providerWebhook, otherLabel},
+		{"somebody-else", kindPod, otherLabel, kindPod},
+		{"", "", otherLabel, otherLabel},
+	}
+	for _, c := range cases {
+		if got := boundedProvider(c.provider); got != c.wantProvider {
+			t.Errorf("boundedProvider(%q) = %q, want %q", c.provider, got, c.wantProvider)
+		}
+		if got := boundedKind(c.provider, c.kind); got != c.wantKind {
+			t.Errorf("boundedKind(%q, %q) = %q, want %q", c.provider, c.kind, got, c.wantKind)
 		}
 	}
 }
