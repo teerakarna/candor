@@ -128,7 +128,8 @@ func (c *FindingsCollector) Collect(ch chan<- prometheus.Metric) {
 		if outcome == "" {
 			outcome = unverifiedOutcome
 		}
-		counts[key{f.Namespace, f.Spec.Severity, outcome, boundedProvider(f.Spec.Source.Provider), boundedKind(f.Spec.Source.Provider, f.Spec.Source.Kind)}]++
+		provider := boundedProvider(f.Spec.Source.Provider)
+		counts[key{f.Namespace, f.Spec.Severity, outcome, provider, boundedKind(provider, f.Spec.Source.Kind)}]++
 
 		if f.Status.ProposedPullRequestURL != "" && outcome != resolvedOutcome {
 			ch <- prometheus.MustNewConstMetric(findingPullRequestInfoDesc, prometheus.GaugeValue, 1,
