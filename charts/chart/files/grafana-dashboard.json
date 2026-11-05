@@ -353,6 +353,134 @@
       ]
     },
     {
+      "id": 151,
+      "title": "Open findings by scanner",
+      "description": "candor_findings_current, excluding Resolved, grouped by the scanner that reported them.",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 12,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [],
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "instant": true,
+          "range": false,
+          "expr": "sum by (provider) (candor_findings_current{outcome!=\"Resolved\", namespace=~\"$namespace\"})",
+          "legendFormat": "{{provider}}"
+        }
+      ]
+    },
+    {
+      "id": 152,
+      "title": "Open findings by resource kind",
+      "description": "candor_findings_current, excluding Resolved, grouped by the kind of the affected resource. Kinds outside a fixed list are shown as other.",
+      "type": "bargauge",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 12,
+        "h": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          },
+          "mappings": [],
+          "unit": "short",
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "instant": true,
+          "range": false,
+          "expr": "sum by (kind) (candor_findings_current{outcome!=\"Resolved\", namespace=~\"$namespace\"})",
+          "legendFormat": "{{kind}}"
+        }
+      ]
+    },
+    {
       "id": 21,
       "title": "Is it working?",
       "description": "Findings found and fixed over time, and the fix pull requests Candor has opened.",
@@ -360,7 +488,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 6,
+        "y": 12,
         "w": 24,
         "h": 1
       },
@@ -377,7 +505,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 7,
+        "y": 13,
         "w": 6,
         "h": 3
       },
@@ -442,7 +570,7 @@
       },
       "gridPos": {
         "x": 6,
-        "y": 7,
+        "y": 13,
         "w": 6,
         "h": 3
       },
@@ -507,7 +635,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 7,
+        "y": 13,
         "w": 6,
         "h": 3
       },
@@ -571,7 +699,7 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 7,
+        "y": 13,
         "w": 6,
         "h": 3
       },
@@ -639,7 +767,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 10,
+        "y": 16,
         "w": 12,
         "h": 8
       },
@@ -709,7 +837,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 10,
+        "y": 16,
         "w": 12,
         "h": 8
       },
@@ -785,7 +913,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 18,
+        "y": 24,
         "w": 24,
         "h": 1
       },
@@ -802,7 +930,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 19,
+        "y": 25,
         "w": 24,
         "h": 8
       },
@@ -954,7 +1082,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 27,
+        "y": 33,
         "w": 24,
         "h": 1
       },
@@ -971,7 +1099,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 28,
+        "y": 34,
         "w": 5,
         "h": 6
       },
@@ -1036,7 +1164,7 @@
       },
       "gridPos": {
         "x": 5,
-        "y": 28,
+        "y": 34,
         "w": 5,
         "h": 6
       },
@@ -1101,7 +1229,7 @@
       },
       "gridPos": {
         "x": 10,
-        "y": 28,
+        "y": 34,
         "w": 6,
         "h": 6
       },
@@ -1171,7 +1299,7 @@
       },
       "gridPos": {
         "x": 16,
-        "y": 28,
+        "y": 34,
         "w": 8,
         "h": 6
       },
@@ -1229,7 +1357,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 34,
+        "y": 40,
         "w": 24,
         "h": 1
       },
@@ -1246,7 +1374,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 35,
+        "y": 41,
         "w": 6,
         "h": 3
       },
@@ -1336,7 +1464,7 @@
       },
       "gridPos": {
         "x": 6,
-        "y": 35,
+        "y": 41,
         "w": 6,
         "h": 3
       },
@@ -1404,7 +1532,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 35,
+        "y": 41,
         "w": 6,
         "h": 3
       },
@@ -1472,7 +1600,7 @@
       },
       "gridPos": {
         "x": 18,
-        "y": 35,
+        "y": 41,
         "w": 6,
         "h": 3
       },
@@ -1537,7 +1665,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 38,
+        "y": 44,
         "w": 24,
         "h": 1
       },
@@ -1553,7 +1681,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 39,
+            "y": 45,
             "w": 24,
             "h": 8
           },

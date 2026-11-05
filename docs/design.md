@@ -300,7 +300,7 @@ budget explicitly, or it is not a solution.
    metrics, which reads as "look how efficient we are" rather than answering the question an
    operator actually opens the dashboard for - what needs attention, right now. Fixing that
    exposed a real gap: none of the existing metrics represent a live current count of Findings by
-   severity, only transition counters. Added `candor_findings_current{namespace,severity,outcome}`
+   severity, only transition counters. Added `candor_findings_current{namespace,severity,outcome,provider,kind}`
    as a Prometheus `Collector` (`internal/metrics.FindingsCollector`) - computed fresh from the
    manager's cached client on every scrape, the same reasoning kube-state-metrics is built on,
    since a plain counter can't correctly express "how many are open right now" (transitions don't

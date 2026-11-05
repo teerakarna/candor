@@ -14,6 +14,8 @@ import (
 const (
 	sevCritical = "CRITICAL"
 	nsTeamA     = "team-a"
+
+	findingsCurrentName = "candor_findings_current"
 )
 
 func finding(namespace, name, severity, outcome string) *candorv1alpha1.Finding {
@@ -101,7 +103,7 @@ func TestFindingsCollector_NoFindings_NoMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, f := range families {
-		if f.GetName() == "candor_findings_current" && len(f.GetMetric()) != 0 {
+		if f.GetName() == findingsCurrentName && len(f.GetMetric()) != 0 {
 			t.Errorf("expected no candor_findings_current samples with zero Findings, got %d", len(f.GetMetric()))
 		}
 	}
@@ -116,7 +118,7 @@ func findGauge(t *testing.T, registry *prometheus.Registry, namespace, severity,
 		t.Fatal(err)
 	}
 	for _, f := range families {
-		if f.GetName() != "candor_findings_current" {
+		if f.GetName() != findingsCurrentName {
 			continue
 		}
 		for _, m := range f.GetMetric() {
@@ -221,5 +223,50 @@ func TestFindingsCollector_PullRequestInfo_NoFindings_NoSeries(t *testing.T) {
 	}
 	if got := prInfoSamples(t, registry); len(got) != 0 {
 		t.Errorf("got %d series with zero Findings, want 0", len(got))
+	}
+}
+
+func TestFindingsCollector_ProviderAndKindLabels_KindIsBounded(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := candorv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	custom := finding(nsTeamA, "f2", sevCritical, "StillPresent")
+	custom.Spec.Source.Provider = "webhook"
+	custom.Spec.Source.Kind = "SomeCallerInvention"
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(
+		finding(nsTeamA, "f1", sevCritical, "StillPresent"),
+		custom,
+	).Build()
+
+	registry := prometheus.NewPedanticRegistry()
+	if err := registry.Register(&FindingsCollector{Reader: c}); err != nil {
+		t.Fatal(err)
+	}
+	families, err := registry.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]float64{}
+	for _, f := range families {
+		if f.GetName() != findingsCurrentName {
+			continue
+		}
+		for _, m := range f.GetMetric() {
+			labels := map[string]string{}
+			for _, l := range m.GetLabel() {
+				labels[l.GetName()] = l.GetValue()
+			}
+			got[labels["provider"]+"/"+labels["kind"]] = m.GetGauge().GetValue()
+		}
+	}
+	want := map[string]float64{"trivy/Deployment": 1, "webhook/" + otherKind: 1}
+	if len(got) != len(want) {
+		t.Fatalf("got series %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("series %q = %v, want %v (all: %v)", k, got[k], v, got)
+		}
 	}
 }

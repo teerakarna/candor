@@ -18,8 +18,8 @@ import (
 // net out to a current count), so this is a live gauge instead, computed fresh on every scrape.
 var findingsCurrentDesc = prometheus.NewDesc(
 	"candor_findings_current",
-	"Current number of Findings, by namespace, severity, and verification outcome.",
-	[]string{labelNamespace, labelSeverity, "outcome"}, nil,
+	"Current number of Findings, by namespace, severity, verification outcome, provider, and resource kind.",
+	[]string{labelNamespace, labelSeverity, "outcome", "provider", "kind"}, nil,
 )
 
 // findingPullRequestInfoDesc describes candor_finding_pull_request_info, the metric behind the
@@ -50,6 +50,27 @@ const labelFinding = "finding"
 // dropped, so a scrape during that window doesn't undercount.
 const unverifiedOutcome = "Unverified"
 
+// otherKind labels a Finding whose resource kind is not in knownKinds.
+const otherKind = "other"
+
+// knownKinds is the closed set of resource kinds reported as the kind label. Spec.Source.Kind is
+// free text for the webhook provider (the caller's payload, only checked for non-empty), so using
+// it directly would let a caller mint unbounded series. Anything outside this set is reported as
+// otherKind. Extend the set when a provider starts producing a kind worth its own series.
+var knownKinds = map[string]bool{
+	"Pod": true, "Deployment": true, "StatefulSet": true, "DaemonSet": true, "ReplicaSet": true,
+	"ReplicationController": true, "Job": true, "CronJob": true, "Service": true, "Ingress": true,
+	"Namespace": true, "Node": true, "ServiceAccount": true, "ConfigMap": true, "Secret": true,
+	"Role": true, "ClusterRole": true, "RoleBinding": true, "ClusterRoleBinding": true,
+}
+
+func boundedKind(kind string) string {
+	if knownKinds[kind] {
+		return kind
+	}
+	return otherKind
+}
+
 // FindingsCollector is a Prometheus collector (not a package-level metric var like the rest of
 // this package) because "current count grouped by attributes" has to be computed from source
 // truth at scrape time - the same reasoning kube-state-metrics is built on. Registered directly
@@ -66,7 +87,7 @@ func (c *FindingsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 // Collect lists every Finding and emits one gauge sample per distinct (namespace, severity,
-// outcome) combination actually present - not one per possible combination, so a combination
+// outcome, provider, kind) combination actually present - not one per possible combination, so a combination
 // with zero Findings simply doesn't appear, rather than reporting a bare 0 (Prometheus and
 // Grafana's `sum(...)  or vector(0)` pattern handle an absent series the same way as an explicit
 // zero for this dashboard's purposes).
@@ -80,14 +101,14 @@ func (c *FindingsCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	type key struct{ namespace, severity, outcome string }
+	type key struct{ namespace, severity, outcome, provider, kind string }
 	counts := make(map[key]int, len(list.Items))
 	for _, f := range list.Items {
 		outcome := f.Status.VerificationOutcome
 		if outcome == "" {
 			outcome = unverifiedOutcome
 		}
-		counts[key{f.Namespace, f.Spec.Severity, outcome}]++
+		counts[key{f.Namespace, f.Spec.Severity, outcome, f.Spec.Source.Provider, boundedKind(f.Spec.Source.Kind)}]++
 
 		if f.Status.ProposedPullRequestURL != "" && outcome != resolvedOutcome {
 			ch <- prometheus.MustNewConstMetric(findingPullRequestInfoDesc, prometheus.GaugeValue, 1,
@@ -96,6 +117,7 @@ func (c *FindingsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for k, v := range counts {
-		ch <- prometheus.MustNewConstMetric(findingsCurrentDesc, prometheus.GaugeValue, float64(v), k.namespace, k.severity, k.outcome)
+		ch <- prometheus.MustNewConstMetric(findingsCurrentDesc, prometheus.GaugeValue, float64(v),
+			k.namespace, k.severity, k.outcome, k.provider, k.kind)
 	}
 }
