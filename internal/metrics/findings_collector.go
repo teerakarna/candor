@@ -18,8 +18,8 @@ import (
 // net out to a current count), so this is a live gauge instead, computed fresh on every scrape.
 var findingsCurrentDesc = prometheus.NewDesc(
 	"candor_findings_current",
-	"Current number of Findings, by namespace, severity, and verification outcome.",
-	[]string{labelNamespace, labelSeverity, "outcome"}, nil,
+	"Current number of Findings, by namespace, severity, verification outcome, provider, and resource kind.",
+	[]string{labelNamespace, labelSeverity, "outcome", "provider", "kind"}, nil,
 )
 
 // findingPullRequestInfoDesc describes candor_finding_pull_request_info, the metric behind the
@@ -50,6 +50,47 @@ const labelFinding = "finding"
 // dropped, so a scrape during that window doesn't undercount.
 const unverifiedOutcome = "Unverified"
 
+// otherLabel is reported for a provider or kind outside the fixed sets below.
+const otherLabel = "other"
+
+// trivyProvider is the one provider whose kind is passed through as-is: the Trivy translator
+// reads it from the scanned workload, so it is as bounded as the cluster's own workload kinds
+// (including CRD-backed ones such as Rollout) and an allowlist would only hide real data.
+const trivyProvider = "trivy"
+
+// knownProviders is the closed set reported as the provider label. Spec.Source.Provider is free
+// text on the CRD, so anything outside this set is reported as otherLabel rather than minting a
+// series per value. Add a provider here when it ships.
+var knownProviders = map[string]bool{trivyProvider: true, "webhook": true}
+
+// knownKinds is the closed set of kinds reported for every provider except Trivy.
+// Spec.Source.Kind is the caller's payload for the webhook provider (only checked for non-empty),
+// so using it directly would let a caller mint unbounded series. Extend the set when a provider
+// starts producing a kind worth its own series.
+var knownKinds = map[string]bool{
+	"Pod": true, "Deployment": true, "StatefulSet": true, "DaemonSet": true, "ReplicaSet": true,
+	"ReplicationController": true, "Job": true, "CronJob": true, "Service": true, "Ingress": true,
+	"Namespace": true, "Node": true, "ServiceAccount": true, "ConfigMap": true, "Secret": true,
+	"Role": true, "ClusterRole": true, "RoleBinding": true, "ClusterRoleBinding": true,
+}
+
+func boundedProvider(provider string) string {
+	if knownProviders[provider] {
+		return provider
+	}
+	return otherLabel
+}
+
+func boundedKind(provider, kind string) string {
+	if provider == trivyProvider && kind != "" {
+		return kind
+	}
+	if knownKinds[kind] {
+		return kind
+	}
+	return otherLabel
+}
+
 // FindingsCollector is a Prometheus collector (not a package-level metric var like the rest of
 // this package) because "current count grouped by attributes" has to be computed from source
 // truth at scrape time - the same reasoning kube-state-metrics is built on. Registered directly
@@ -66,8 +107,8 @@ func (c *FindingsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 // Collect lists every Finding and emits one gauge sample per distinct (namespace, severity,
-// outcome) combination actually present - not one per possible combination, so a combination
-// with zero Findings simply doesn't appear, rather than reporting a bare 0 (Prometheus and
+// outcome, provider, kind) combination actually present - not one per possible combination, so a
+// combination with zero Findings simply doesn't appear, rather than reporting a bare 0 (Prometheus and
 // Grafana's `sum(...)  or vector(0)` pattern handle an absent series the same way as an explicit
 // zero for this dashboard's purposes).
 //
@@ -80,14 +121,15 @@ func (c *FindingsCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	type key struct{ namespace, severity, outcome string }
+	type key struct{ namespace, severity, outcome, provider, kind string }
 	counts := make(map[key]int, len(list.Items))
 	for _, f := range list.Items {
 		outcome := f.Status.VerificationOutcome
 		if outcome == "" {
 			outcome = unverifiedOutcome
 		}
-		counts[key{f.Namespace, f.Spec.Severity, outcome}]++
+		provider := boundedProvider(f.Spec.Source.Provider)
+		counts[key{f.Namespace, f.Spec.Severity, outcome, provider, boundedKind(provider, f.Spec.Source.Kind)}]++
 
 		if f.Status.ProposedPullRequestURL != "" && outcome != resolvedOutcome {
 			ch <- prometheus.MustNewConstMetric(findingPullRequestInfoDesc, prometheus.GaugeValue, 1,
@@ -96,6 +138,7 @@ func (c *FindingsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	for k, v := range counts {
-		ch <- prometheus.MustNewConstMetric(findingsCurrentDesc, prometheus.GaugeValue, float64(v), k.namespace, k.severity, k.outcome)
+		ch <- prometheus.MustNewConstMetric(findingsCurrentDesc, prometheus.GaugeValue, float64(v),
+			k.namespace, k.severity, k.outcome, k.provider, k.kind)
 	}
 }

@@ -179,7 +179,7 @@ def render():
 
         lines.append(
             "# HELP candor_findings_current Current number of Findings, by namespace, severity, "
-            "and verification outcome."
+            "verification outcome, provider, and resource kind."
         )
         lines.append("# TYPE candor_findings_current gauge")
         for (namespace, severity), f in findings.items():
@@ -188,9 +188,17 @@ def render():
             # internal/signal.Ingest - Recurred isn't sticky), so the live snapshot is
             # overwhelmingly StillPresent in practice. Simulating that one-reconcile window isn't
             # worth the complexity here - every currently-open finding is reported StillPresent.
-            lines.append(
-                f'candor_findings_current{{namespace="{namespace}",severity="{severity}",outcome="StillPresent"}} {f["open"]}'
-            )
+            # Spread the open count over a fixed provider/kind mix so the breakdown panels have
+            # something to show. Round-robin by index keeps the total equal to f["open"].
+            mix = [("trivy", "Deployment"), ("trivy", "StatefulSet"), ("trivy", "DaemonSet"), ("webhook", "other")]
+            split = {}
+            for i in range(f["open"]):
+                split[mix[i % len(mix)]] = split.get(mix[i % len(mix)], 0) + 1
+            for (provider, kind), n in split.items():
+                lines.append(
+                    f'candor_findings_current{{namespace="{namespace}",severity="{severity}",outcome="StillPresent",'
+                    f'provider="{provider}",kind="{kind}"}} {n}'
+                )
 
         return "\n".join(lines) + "\n"
 
