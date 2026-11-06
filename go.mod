@@ -1,6 +1,6 @@
 module github.com/teerakarna/candor
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/google/go-github/v76 v76.0.0
