@@ -50,6 +50,10 @@ Two things to know when reading it:
 - The setting applies to every backend, including Anthropic. With `ANTHROPIC_API_KEY` set,
   `CANDOR_EVAL_RUNS=5` spends five times the credits, so unset the key when comparing local models.
 
+`CANDOR_EVAL_DUMP=<path>` appends one JSON line per fixture result (backend, run, expected and
+actual action, the model's cause text, pass or fail, any error). The report keeps only pass or fail,
+so use the dump to tell a model that answered badly from a substring list that was too narrow.
+
 Prints the report and writes it to `report.md` in this directory. Commit the refreshed
 `report.md` when you want the published numbers to reflect a new run (a new fixture, a model
 change, a routine re-check) - it isn't regenerated automatically.
