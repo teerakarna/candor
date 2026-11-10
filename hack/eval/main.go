@@ -85,8 +85,10 @@ func run() error {
 			start := time.Now()
 			results := runFixtures(ctx, b.client)
 			if dump != nil {
+				// A diagnostic side channel: a failed write must not throw away the results
+				// of a run that may have taken the better part of an hour.
 				if err := writeDump(dump, b.name, len(summaries)+1, results); err != nil {
-					return err
+					fmt.Fprintln(os.Stderr, "eval: writing CANDOR_EVAL_DUMP:", err)
 				}
 			}
 			summaries = append(summaries, RunSummary{Results: results, Elapsed: time.Since(start)})
@@ -186,5 +188,5 @@ func openDump() (*os.File, error) {
 	if path == "" {
 		return nil, nil
 	}
-	return os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	return os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 }

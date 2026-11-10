@@ -206,3 +206,20 @@ func TestWriteDump_OneLinePerResultKeepsTheAnswer(t *testing.T) {
 		t.Errorf("second record = %+v", second)
 	}
 }
+
+func TestWriteDump_NoHypothesesIsNotSilent(t *testing.T) {
+	r := Score(fixture(candorv1alpha1.ActionNotify, "shell"), llm.Response{}, nil)
+
+	var buf bytes.Buffer
+	if err := writeDump(&buf, "ollama:m", 1, []Result{r}); err != nil {
+		t.Fatal(err)
+	}
+
+	var rec dumpRecord
+	if err := json.Unmarshal(buf.Bytes(), &rec); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Error != "no hypotheses returned" {
+		t.Errorf("Error = %q, want it to say no hypotheses were returned", rec.Error)
+	}
+}

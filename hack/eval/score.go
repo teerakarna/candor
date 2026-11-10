@@ -241,8 +241,11 @@ func writeDump(w io.Writer, backend string, run int, results []Result) error {
 			rec.GotAction = r.Response.Hypotheses[0].RecommendedAction
 			rec.GotCause = r.Response.Hypotheses[0].Cause
 		}
-		if r.Err != nil {
+		switch {
+		case r.Err != nil:
 			rec.Error = r.Err.Error()
+		case len(r.Response.Hypotheses) == 0:
+			rec.Error = "no hypotheses returned"
 		}
 		if err := enc.Encode(rec); err != nil {
 			return err
