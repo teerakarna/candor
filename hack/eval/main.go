@@ -69,6 +69,14 @@ func run() error {
 		return err
 	}
 
+	dump, err := openDump()
+	if err != nil {
+		return err
+	}
+	if dump != nil {
+		defer func() { _ = dump.Close() }()
+	}
+
 	ctx := context.Background()
 	var reports []string
 	for _, b := range backends {
@@ -76,6 +84,13 @@ func run() error {
 		for range runs {
 			start := time.Now()
 			results := runFixtures(ctx, b.client)
+			if dump != nil {
+				// A diagnostic side channel: a failed write must not throw away the results
+				// of a run that may have taken the better part of an hour.
+				if err := writeDump(dump, b.name, len(summaries)+1, results); err != nil {
+					fmt.Fprintln(os.Stderr, "eval: writing CANDOR_EVAL_DUMP:", err)
+				}
+			}
 			summaries = append(summaries, RunSummary{Results: results, Elapsed: time.Since(start)})
 		}
 		if runs == 1 {
@@ -162,4 +177,16 @@ func runFixtures(ctx context.Context, client llm.Client) []Result {
 		results = append(results, Score(f, resp, err))
 	}
 	return results
+}
+
+// openDump opens the file named by CANDOR_EVAL_DUMP for appending, or returns nil when unset. The
+// report records only pass or fail per fixture, so when a score looks wrong there is no way to
+// tell a model that answered badly from a substring list that was too narrow; the dump keeps the
+// answer itself.
+func openDump() (*os.File, error) {
+	path := os.Getenv("CANDOR_EVAL_DUMP")
+	if path == "" {
+		return nil, nil
+	}
+	return os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 }

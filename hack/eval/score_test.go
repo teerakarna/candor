@@ -17,6 +17,8 @@ limitations under the License.
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -122,7 +124,7 @@ func TestReport_CountsAndFailuresAreVisible(t *testing.T) {
 	if !strings.Contains(report, "Action accuracy: 1/2") {
 		t.Errorf("report missing action accuracy line:\n%s", report)
 	}
-	if !strings.Contains(report, "Cause accuracy: 1/2") {
+	if !strings.Contains(report, "Cause accuracy (informational only, see issue #155): 1/2") {
 		t.Errorf("report missing cause accuracy line:\n%s", report)
 	}
 	if !strings.Contains(report, "timeout") {
@@ -170,5 +172,54 @@ func TestReportRuns_ShowsSpreadErrorsTokensAndPerFixturePasses(t *testing.T) {
 func TestReportRuns_NoRuns(t *testing.T) {
 	if got := ReportRuns("m", nil); !strings.Contains(got, "No runs") {
 		t.Errorf("ReportRuns with no runs = %q, want a No runs note", got)
+	}
+}
+
+func TestWriteDump_OneLinePerResultKeepsTheAnswer(t *testing.T) {
+	f := fixture(candorv1alpha1.ActionNotify, "shell")
+	ok := Score(f, llm.Response{Hypotheses: []llm.Hypothesis{
+		{Cause: "Shell spawned in a container", RecommendedAction: candorv1alpha1.ActionNotify},
+	}}, nil)
+	failed := Score(f, llm.Response{}, errors.New("timeout"))
+
+	var buf bytes.Buffer
+	if err := writeDump(&buf, "ollama:m", 2, []Result{ok, failed}); err != nil {
+		t.Fatal(err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("got %d lines, want 2: %q", len(lines), buf.String())
+	}
+	var first, second dumpRecord
+	if err := json.Unmarshal([]byte(lines[0]), &first); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(lines[1]), &second); err != nil {
+		t.Fatal(err)
+	}
+	if first.Backend != "ollama:m" || first.Run != 2 || !first.CauseCorrect || first.Error != "" ||
+		first.GotCause != "Shell spawned in a container" {
+		t.Errorf("first record = %+v", first)
+	}
+	if second.Error != "timeout" || second.GotCause != "" || second.CauseCorrect {
+		t.Errorf("second record = %+v", second)
+	}
+}
+
+func TestWriteDump_NoHypothesesIsNotSilent(t *testing.T) {
+	r := Score(fixture(candorv1alpha1.ActionNotify, "shell"), llm.Response{}, nil)
+
+	var buf bytes.Buffer
+	if err := writeDump(&buf, "ollama:m", 1, []Result{r}); err != nil {
+		t.Fatal(err)
+	}
+
+	var rec dumpRecord
+	if err := json.Unmarshal(buf.Bytes(), &rec); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Error != "no hypotheses returned" {
+		t.Errorf("Error = %q, want it to say no hypotheses were returned", rec.Error)
 	}
 }
