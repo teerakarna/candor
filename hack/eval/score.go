@@ -17,7 +17,9 @@ limitations under the License.
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -77,7 +79,7 @@ func Report(model string, results []Result) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Fixture suite results - %s\n\n", model)
 	fmt.Fprintf(&b, "Action accuracy: %d/%d (%.0f%%)\n\n", actionN, n, pct(actionN, n))
-	fmt.Fprintf(&b, "Cause accuracy: %d/%d (%.0f%%)\n\n", causeN, n, pct(causeN, n))
+	fmt.Fprintf(&b, "Cause accuracy (informational only, see issue #155): %d/%d (%.0f%%)\n\n", causeN, n, pct(causeN, n))
 	b.WriteString("| Fixture | Action | Cause | Error |\n|---|---|---|---|\n")
 	for _, r := range results {
 		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n",
@@ -174,7 +176,7 @@ func ReportRuns(model string, runs []RunSummary) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Fixture suite results - %s (%d runs)\n\n", model, n)
 	fmt.Fprintf(&b, "Action accuracy: %s\n\n", spread(actions))
-	fmt.Fprintf(&b, "Cause accuracy: %s\n\n", spread(causes))
+	fmt.Fprintf(&b, "Cause accuracy (informational only, see issue #155): %s\n\n", spread(causes))
 	fmt.Fprintf(&b, "Errored calls: %d of %d\n\n", totalErrors, totalCalls)
 	fmt.Fprintf(&b, "Per run, on average: %d input and %d output tokens, %s wall time\n\n",
 		totalIn/n, totalOut/n, (totalElapsed / time.Duration(n)).Round(time.Second))
@@ -210,4 +212,44 @@ func spread(vals []float64) string {
 		}
 	}
 	return fmt.Sprintf("%.0f%% mean (%.0f%% to %.0f%%) over %d runs", sum/float64(len(vals)), lo, hi, len(vals))
+}
+
+// dumpRecord is one fixture result as written to the CANDOR_EVAL_DUMP file, one JSON object per line.
+type dumpRecord struct {
+	Backend           string   `json:"backend"`
+	Run               int      `json:"run"`
+	Fixture           string   `json:"fixture"`
+	WantAction        string   `json:"wantAction"`
+	GotAction         string   `json:"gotAction"`
+	WantCauseContains []string `json:"wantCauseContains"`
+	GotCause          string   `json:"gotCause"`
+	ActionCorrect     bool     `json:"actionCorrect"`
+	CauseCorrect      bool     `json:"causeCorrect"`
+	Error             string   `json:"error,omitempty"`
+}
+
+// writeDump appends one record per result to w, for run number run (1-based) of backend.
+func writeDump(w io.Writer, backend string, run int, results []Result) error {
+	enc := json.NewEncoder(w)
+	for _, r := range results {
+		rec := dumpRecord{
+			Backend: backend, Run: run, Fixture: r.Fixture.Name,
+			WantAction: r.Fixture.WantAction, WantCauseContains: r.Fixture.WantCauseContains,
+			ActionCorrect: r.ActionCorrect, CauseCorrect: r.CauseCorrect,
+		}
+		if len(r.Response.Hypotheses) > 0 {
+			rec.GotAction = r.Response.Hypotheses[0].RecommendedAction
+			rec.GotCause = r.Response.Hypotheses[0].Cause
+		}
+		switch {
+		case r.Err != nil:
+			rec.Error = r.Err.Error()
+		case len(r.Response.Hypotheses) == 0:
+			rec.Error = "no hypotheses returned"
+		}
+		if err := enc.Encode(rec); err != nil {
+			return err
+		}
+	}
+	return nil
 }
