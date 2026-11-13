@@ -223,3 +223,35 @@ func TestWriteDump_NoHypothesesIsNotSilent(t *testing.T) {
 		t.Errorf("Error = %q, want it to say no hypotheses were returned", rec.Error)
 	}
 }
+
+func TestReportRuns_ShowsDistinctErrorsWithCounts(t *testing.T) {
+	f := fixture(candorv1alpha1.ActionNotify, "shell")
+	failing := RunSummary{Results: []Result{
+		Score(f, llm.Response{}, errors.New("credit balance is too low")),
+		Score(f, llm.Response{}, errors.New("credit balance is too low")),
+		Score(f, llm.Response{}, errors.New("model not found")),
+	}}
+	report := ReportRuns("anthropic:m", []RunSummary{failing, failing})
+
+	wants := []string{
+		"Error messages (distinct, with counts):", "- 4x: credit balance is too low", "- 2x: model not found",
+	}
+	for _, want := range wants {
+		if !strings.Contains(report, want) {
+			t.Errorf("report missing %q:\n%s", want, report)
+		}
+	}
+	if strings.Index(report, "4x: credit") > strings.Index(report, "2x: model") {
+		t.Errorf("most frequent error should come first:\n%s", report)
+	}
+}
+
+func TestReportRuns_NoErrorsNoErrorSection(t *testing.T) {
+	f := fixture(candorv1alpha1.ActionNotify, "shell")
+	ok := RunSummary{Results: []Result{Score(f, llm.Response{Hypotheses: []llm.Hypothesis{
+		{Cause: "shell", RecommendedAction: candorv1alpha1.ActionNotify},
+	}}, nil)}}
+	if report := ReportRuns("m", []RunSummary{ok}); strings.Contains(report, "Error messages") {
+		t.Errorf("unexpected error section:\n%s", report)
+	}
+}
