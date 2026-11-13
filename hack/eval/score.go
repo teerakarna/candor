@@ -79,7 +79,7 @@ func Report(model string, results []Result) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Fixture suite results - %s\n\n", model)
 	fmt.Fprintf(&b, "Action accuracy: %d/%d (%.0f%%)\n\n", actionN, n, pct(actionN, n))
-	fmt.Fprintf(&b, "Cause accuracy: %d/%d (%.0f%%)\n\n", causeN, n, pct(causeN, n))
+	fmt.Fprintf(&b, "Cause accuracy (informational only, see issue #155): %d/%d (%.0f%%)\n\n", causeN, n, pct(causeN, n))
 	b.WriteString("| Fixture | Action | Cause | Error |\n|---|---|---|---|\n")
 	for _, r := range results {
 		fmt.Fprintf(&b, "| %s | %s | %s | %s |\n",
@@ -176,7 +176,7 @@ func ReportRuns(model string, runs []RunSummary) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Fixture suite results - %s (%d runs)\n\n", model, n)
 	fmt.Fprintf(&b, "Action accuracy: %s\n\n", spread(actions))
-	fmt.Fprintf(&b, "Cause accuracy: %s\n\n", spread(causes))
+	fmt.Fprintf(&b, "Cause accuracy (informational only, see issue #155): %s\n\n", spread(causes))
 	fmt.Fprintf(&b, "Errored calls: %d of %d\n\n", totalErrors, totalCalls)
 	fmt.Fprintf(&b, "Per run, on average: %d input and %d output tokens, %s wall time\n\n",
 		totalIn/n, totalOut/n, (totalElapsed / time.Duration(n)).Round(time.Second))

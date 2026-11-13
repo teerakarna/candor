@@ -576,10 +576,13 @@ training data for the next version.
   periodic, human-run job outside the operator, as above.
 
 What has to be true before any of this is built, in order: the hosted model measured on the same
-fixture suite as the open models (not yet run), a cause metric that does not reward echoing the
-input (issue #155; the current substring check does), and enough fixtures and runs that differences
+fixture suite as the open models (not yet run), and enough fixtures and runs that differences
 between models are larger than run-to-run noise (a first four-model comparison moved one model's
 action accuracy from 46% to 75% between two batches of three runs with no change to grading).
+Decided 2026-11-13 (issue #155): the comparison is made on action accuracy, which is graded against
+the closed action catalog. Cause accuracy stays in the report as informational only, because the
+substring check rewards echoing words already in the fixture's input; it can return as a gate once
+the fixtures are rewritten so the diagnosis needs something the input does not state.
 Until then this section is a record of intent, not a plan.
 
 Grammar-constrained output for a locally-served model is real but conditional, verified 2026-09-24

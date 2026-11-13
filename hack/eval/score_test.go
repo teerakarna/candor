@@ -124,7 +124,7 @@ func TestReport_CountsAndFailuresAreVisible(t *testing.T) {
 	if !strings.Contains(report, "Action accuracy: 1/2") {
 		t.Errorf("report missing action accuracy line:\n%s", report)
 	}
-	if !strings.Contains(report, "Cause accuracy: 1/2") {
+	if !strings.Contains(report, "Cause accuracy (informational only, see issue #155): 1/2") {
 		t.Errorf("report missing cause accuracy line:\n%s", report)
 	}
 	if !strings.Contains(report, "timeout") {

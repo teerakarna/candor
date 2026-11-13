@@ -54,6 +54,11 @@ Two things to know when reading it:
 actual action, the model's cause text, pass or fail, any error). The report keeps only pass or fail,
 so use the dump to tell a model that answered badly from a substring list that was too narrow.
 
+Compare models on action accuracy, which is graded against the closed action catalog. Cause
+accuracy is printed as informational only: it is a substring match, and every accepted word is
+already in the fixture's own summary, so a model that repeats the input passes (issue #155). Don't
+read a cause score as a diagnosis score, and don't tune the cause word lists to move it.
+
 Prints the report and writes it to `report.md` in this directory. Commit the refreshed
 `report.md` when you want the published numbers to reflect a new run (a new fixture, a model
 change, a routine re-check) - it isn't regenerated automatically.
