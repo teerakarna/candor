@@ -542,6 +542,49 @@ deliberate scope decision - this turns Candor from a K8s operator into a K8s ope
 ongoing MLOps feedback loop, a real jump in maintenance surface that deserves weighing on its own,
 not sliding into as a side effect of slice 12.
 
+Shape of the handover loop, written down 2026-11-10 so the assumptions are on record before any
+build. Nothing here is implemented, and none of the figures are measured. The idea: the hosted
+model stays the teacher and handles every enrichment at first. A small local model learns from its
+history. As the small model proves itself on a class of finding, routing hands that class to it,
+the teacher keeps a sample and the cases the student is unsure of, and a student mistake becomes
+training data for the next version.
+
+- **The steady state is a share, and it never reaches 100%.** The fraction the student handles
+  settles where three things meet: its accuracy on each fingerprint class, the confidence bar for
+  handing a class over, and the rate of forced shadow calls to the teacher. That shadow rate has a
+  floor above zero, because without it a mistake by the student is invisible and it ends up
+  training on its own errors. A new class of finding (a kind of CVE it has not seen) pulls the
+  share back down until a later version catches up. So the hosted model is never switched off, and
+  its cost shrinks to the shadow sample plus the escalations.
+- **There are two signals, and neither alone is enough.** `Finding.status.verificationOutcome` says
+  whether an action worked, arrives late, and says nothing about whether the student agreed with
+  the teacher. Teacher output says what the teacher chose, errors included. Training on teacher
+  output filtered by verified outcome uses both, and a student-teacher disagreement on a shadow
+  call is the only fast signal that a mistake happened.
+- **Data volume is the first open question.** One cluster may produce tens to hundreds of Findings
+  a day, which is likely far below what a fine-tune needs. Unverified: the real rate on a real
+  install. If it is low, the options are pooling history across installs (a privacy and ownership
+  question that needs its own decision) or using few-shot examples from that history instead of
+  training at all.
+- **Every retrain is a new model, so it has to be promoted, not just deployed.** A candidate runs as
+  a challenger in shadow mode, must beat the current champion on a held-out set and on live shadow
+  comparisons, and can be rolled back. At most two versions are live at once.
+- **One lineage of one student model, not a model per class and not a swarm.** A trained model is a
+  weights file served by Ollama, with no session or memory between calls. Serving concurrency is
+  request queueing bounded by the hardware (the 6 GB CPU sandbox is the limit today), not parallel
+  agents. Routing is decided per fingerprint class, but the model is one. Training stays a single,
+  periodic, human-run job outside the operator, as above.
+
+What has to be true before any of this is built, in order: the hosted model measured on the same
+fixture suite as the open models (not yet run), and enough fixtures and runs that differences
+between models are larger than run-to-run noise (a first four-model comparison moved one model's
+action accuracy from 46% to 75% between two batches of three runs with no change to grading).
+Decided 2026-11-13 (issue #155): the comparison is made on action accuracy, which is graded against
+the closed action catalog. Cause accuracy stays in the report as informational only, because the
+substring check rewards echoing words already in the fixture's input; it can return as a gate once
+the fixtures are rewritten so the diagnosis needs something the input does not state.
+Until then this section is a record of intent, not a plan.
+
 Grammar-constrained output for a locally-served model is real but conditional, verified 2026-09-24
 against Ollama v0.34.3 (`llama3.2:3b`) before slice 10 implementation started, see issue #52's
 comments for the raw evidence: passing a full JSON schema via the `format` field genuinely
