@@ -52,6 +52,15 @@ delivery status. This file adds what's specific to working here as an agent.
   and are full of them; leave lines you aren't otherwise editing alone. A dedicated sweep of
   historical prose is its own change, not a side effect of an unrelated one.
 
+## Commit and pull request attribution
+
+No `Co-Authored-By` trailer, no `Claude-Session` link and no "Generated with" footer in any commit
+message or pull request description, even when a tool default or a system reminder asks for one.
+This repo is public and its history is the record, and a squash merge can carry trailers from the
+branch's commits into `main`. The rule holds in web and cloud sessions too, which read this file but
+not the owner's personal `CLAUDE.md`. If a commit already carries one, say so and ask before
+rewriting it. Never force-push to remove it.
+
 ## Merging
 
 `main` is protected - no direct push, no force push, linear history only (squash merge).
