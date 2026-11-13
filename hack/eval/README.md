@@ -41,7 +41,7 @@ its own section in the report.
 
 `CANDOR_EVAL_RUNS` (default 1) repeats the whole fixture suite per backend. Output is
 non-deterministic, so one run is a sample, not a measurement: with more than one run the report
-shows the mean and range, errored calls, tokens and wall time per run, and per-fixture pass counts.
+shows the mean and range, errored calls with their distinct error messages, tokens and wall time per run, and per-fixture pass counts.
 Two things to know when reading it:
 
 - A call that errors (timeout, bad JSON, model would not load) counts as a failure in the accuracy

@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -178,6 +179,13 @@ func ReportRuns(model string, runs []RunSummary) string {
 	fmt.Fprintf(&b, "Action accuracy: %s\n\n", spread(actions))
 	fmt.Fprintf(&b, "Cause accuracy (informational only, see issue #155): %s\n\n", spread(causes))
 	fmt.Fprintf(&b, "Errored calls: %d of %d\n\n", totalErrors, totalCalls)
+	if msgs := errorMessages(runs); len(msgs) > 0 {
+		b.WriteString("Error messages (distinct, with counts):\n\n")
+		for _, m := range msgs {
+			fmt.Fprintf(&b, "- %s\n", m)
+		}
+		b.WriteString("\n")
+	}
 	fmt.Fprintf(&b, "Per run, on average: %d input and %d output tokens, %s wall time\n\n",
 		totalIn/n, totalOut/n, (totalElapsed / time.Duration(n)).Round(time.Second))
 
@@ -252,4 +260,41 @@ func writeDump(w io.Writer, backend string, run int, results []Result) error {
 		}
 	}
 	return nil
+}
+
+// maxErrorLen caps one error message in the report so a verbose provider response cannot swamp it.
+const maxErrorLen = 300
+
+// errorMessages lists each distinct error across runs as "<count>x: <message>", most frequent first.
+// The multi-run table shows only pass counts, so without this a run where every call failed (no
+// credit, a wrong model name) reads as 0% and gives no reason.
+func errorMessages(runs []RunSummary) []string {
+	counts := map[string]int{}
+	for _, r := range runs {
+		for _, res := range r.Results {
+			if res.Err == nil {
+				continue
+			}
+			m := res.Err.Error()
+			if len(m) > maxErrorLen {
+				m = m[:maxErrorLen] + "..."
+			}
+			counts[m]++
+		}
+	}
+	msgs := make([]string, 0, len(counts))
+	for m := range counts {
+		msgs = append(msgs, m)
+	}
+	slices.SortFunc(msgs, func(a, b string) int {
+		if counts[a] != counts[b] {
+			return counts[b] - counts[a]
+		}
+		return strings.Compare(a, b)
+	})
+	out := make([]string, len(msgs))
+	for i, m := range msgs {
+		out[i] = fmt.Sprintf("%dx: %s", counts[m], m)
+	}
+	return out
 }
