@@ -195,7 +195,12 @@ func (r *FindingReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		metrics.LLMCallsTotal.WithLabelValues("success").Inc()
 		metrics.RecordLLMTokens(resp.Usage.Provider, resp.Usage.InputTokens, resp.Usage.OutputTokens)
 
-		finding.Status.Hypotheses = toHypotheses(resp.Hypotheses)
+		hypotheses := toHypotheses(resp.Hypotheses)
+		if len(hypotheses) < len(resp.Hypotheses) {
+			log.Info("kept fewer LLM hypotheses than returned: over the cap, confidence outside [0, 1], or an invalid first entry",
+				"returned", len(resp.Hypotheses), "kept", len(hypotheses), "cap", llm.MaxHypotheses)
+		}
+		finding.Status.Hypotheses = hypotheses
 		finding.Status.EnrichedFingerprint = finding.Status.Fingerprint
 		if err := r.Status().Update(ctx, finding); err != nil {
 			return ctrl.Result{}, err
@@ -346,10 +351,27 @@ func (r *FindingReconciler) markPullRequestFingerprintAttempted(ctx context.Cont
 
 // toHypotheses converts llm.Hypothesis (Confidence as a 0.0-1.0 float64, fine for an in-process
 // API response type) to the CRD's Hypothesis (Confidence as a 0-100 int32 - Kubernetes API
-// convention discourages floats in CRD schemas; see the field's doc comment).
+// convention discourages floats in CRD schemas; see the field's doc comment), for every backend.
+//
+// Like sanitizeRecommendedAction, it holds a backend's confidence values and count to what the CRD
+// accepts, so one bad value cannot get the whole status update rejected and requeued, paying for the same bad
+// answer on every retry. An entry with confidence outside [0, 1] is dropped rather than clamped (a
+// clamp would turn a malformed answer into a confident one), and at most llm.MaxHypotheses are
+// kept. The exception is the first entry: tryProposePullRequest decides from Hypotheses[0] alone,
+// so if the model's own first choice is invalid nothing is kept, rather than promoting a
+// lower-ranked entry into the deciding slot.
 func toHypotheses(in []llm.Hypothesis) []candorv1alpha1.Hypothesis {
-	out := make([]candorv1alpha1.Hypothesis, 0, len(in))
+	out := make([]candorv1alpha1.Hypothesis, 0, llm.MaxHypotheses)
+	if len(in) > 0 && !validConfidence(in[0].Confidence) {
+		return out
+	}
 	for _, h := range in {
+		if len(out) == llm.MaxHypotheses {
+			break
+		}
+		if !validConfidence(h.Confidence) {
+			continue
+		}
 		out = append(out, candorv1alpha1.Hypothesis{
 			Cause:             h.Cause,
 			Confidence:        int32(math.Round(h.Confidence * 100)),
@@ -358,6 +380,11 @@ func toHypotheses(in []llm.Hypothesis) []candorv1alpha1.Hypothesis {
 		})
 	}
 	return out
+}
+
+// validConfidence also rejects NaN, which fails both comparisons.
+func validConfidence(c float64) bool {
+	return c >= 0 && c <= 1
 }
 
 // sanitizeRecommendedAction validates an LLM's recommended action against Candor's fixed catalog,

@@ -79,18 +79,22 @@ const (
 	typeString = "string"
 )
 
+// Structured outputs reject maxItems, minimum and maximum with a 400, and accept minItems only as
+// 0 or 1 (https://platform.claude.com/docs/en/build-with-claude/structured-outputs), so the count
+// and the confidence range are stated in the descriptions below and enforced by
+// internal/controller after parsing, for every backend.
 var hypothesesSchema = map[string]any{
 	schemaType: "object",
 	"properties": map[string]any{
 		"hypotheses": map[string]any{
-			schemaType: "array",
-			"minItems": 1,
-			"maxItems": 3,
+			schemaType:    "array",
+			"description": fmt.Sprintf("1 to %d hypotheses, most likely first.", llm.MaxHypotheses),
+			"minItems":    1,
 			"items": map[string]any{
 				schemaType: "object",
 				"properties": map[string]any{
 					"cause":      map[string]any{schemaType: typeString},
-					"confidence": map[string]any{schemaType: "number", "minimum": 0, "maximum": 1},
+					"confidence": map[string]any{schemaType: "number", "description": "Between 0 and 1 inclusive."},
 					"rationale":  map[string]any{schemaType: typeString},
 					// Grammar-constrained to exactly the fixed action catalog - the model cannot
 					// emit any other string here, so this is a closed choice, not free-form
