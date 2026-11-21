@@ -3,6 +3,7 @@ package anthropic
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +16,7 @@ const (
 	testProvider = "trivy"
 	testKind     = "Deployment"
 	testName     = "api"
+	testSeverity = "HIGH"
 )
 
 func TestEnrich_SendsExpectedRequest(t *testing.T) {
@@ -106,7 +108,7 @@ func TestEnrich_APIError(t *testing.T) {
 	defer srv.Close()
 
 	c := New("test-key", WithBaseURL(srv.URL))
-	_, err := c.Enrich(context.Background(), llm.Request{Provider: testProvider, Severity: "HIGH", Summary: "s", Kind: testKind, Name: testName})
+	_, err := c.Enrich(context.Background(), llm.Request{Provider: testProvider, Severity: testSeverity, Summary: "s", Kind: testKind, Name: testName})
 	if err == nil {
 		t.Fatal("expected an error for a 429 response")
 	}
@@ -120,7 +122,7 @@ func TestEnrich_MalformedResponse(t *testing.T) {
 	defer srv.Close()
 
 	c := New("test-key", WithBaseURL(srv.URL))
-	_, err := c.Enrich(context.Background(), llm.Request{Provider: testProvider, Severity: "HIGH", Summary: "s", Kind: testKind, Name: testName})
+	_, err := c.Enrich(context.Background(), llm.Request{Provider: testProvider, Severity: testSeverity, Summary: "s", Kind: testKind, Name: testName})
 	if err == nil {
 		t.Fatal("expected an error when the structured output isn't valid JSON")
 	}
@@ -156,5 +158,93 @@ func TestEnrich_MissingUsageIsZero(t *testing.T) {
 	}
 	if resp.Usage.InputTokens != 0 || resp.Usage.OutputTokens != 0 {
 		t.Errorf("Usage = %+v, want zero counts when the response has no usage", resp.Usage)
+	}
+}
+
+// TestHypothesesSchema_OnlySupportedKeywords guards against the schema drifting onto keywords
+// structured outputs reject with a 400 - the fake servers in these tests accept any schema, so
+// nothing else here would catch it. It is an allowlist, so a keyword nobody has checked against
+// https://platform.claude.com/docs/en/build-with-claude/structured-outputs fails closed.
+func TestHypothesesSchema_OnlySupportedKeywords(t *testing.T) {
+	allowed := map[string]bool{
+		"type": true, "properties": true, "items": true, "required": true,
+		"additionalProperties": true, "enum": true, "description": true, "minItems": true,
+	}
+	var walk func(path string, node any)
+	walk = func(path string, node any) {
+		switch n := node.(type) {
+		case map[string]any:
+			for k, v := range n {
+				if !allowed[k] {
+					t.Errorf("%s: keyword %q is not on the structured outputs allowlist", path, k)
+				}
+				if k == "minItems" {
+					if c, ok := v.(int); !ok || c > 1 {
+						t.Errorf("%s: minItems %v, structured outputs accept only 0 or 1", path, v)
+					}
+				}
+				if k == "properties" {
+					// Its keys are field names, not keywords: check each field's schema instead.
+					if props, ok := v.(map[string]any); ok {
+						for name, sub := range props {
+							walk(path+".properties."+name, sub)
+						}
+						continue
+					}
+				}
+				walk(path+"."+k, v)
+			}
+		case []any:
+			for i, v := range n {
+				walk(fmt.Sprintf("%s[%d]", path, i), v)
+			}
+		}
+	}
+	walk("schema", hypothesesSchema)
+}
+
+func TestEnrich_TextBlockNeedNotBeFirst(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"stop_reason":"end_turn","content":[{"type":"thinking","thinking":"..."},` +
+			`{"type":"text","text":"{\"hypotheses\":[{\"cause\":\"a\",\"confidence\":0.5,\"rationale\":\"r\",\"recommendedAction\":\"Notify\"}]}"}]}`))
+	}))
+	defer srv.Close()
+
+	c := New("test-key", WithBaseURL(srv.URL))
+	resp, err := c.Enrich(context.Background(), llm.Request{Provider: testProvider, Severity: testSeverity, Summary: "s", Kind: testKind, Name: testName})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Hypotheses) != 1 || resp.Hypotheses[0].Cause != "a" {
+		t.Errorf("hypotheses = %+v, want the one from the text block", resp.Hypotheses)
+	}
+}
+
+func TestEnrich_NoTextBlockReportsStopReason(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"stop_reason":"refusal","content":[]}`))
+	}))
+	defer srv.Close()
+
+	c := New("test-key", WithBaseURL(srv.URL))
+	_, err := c.Enrich(context.Background(), llm.Request{Provider: testProvider, Severity: testSeverity, Summary: "s", Kind: testKind, Name: testName})
+	if err == nil || !strings.Contains(err.Error(), `stop_reason "refusal"`) {
+		t.Errorf("err = %v, want it to name the stop_reason", err)
+	}
+}
+
+func TestEnrich_TruncatedAtMaxTokensSaysSo(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"stop_reason":"max_tokens","content":[{"type":"text","text":"{\"hypotheses\":[{\"cause\":\"a"}]}`))
+	}))
+	defer srv.Close()
+
+	c := New("test-key", WithBaseURL(srv.URL))
+	_, err := c.Enrich(context.Background(), llm.Request{Provider: testProvider, Severity: testSeverity, Summary: "s", Kind: testKind, Name: testName})
+	if err == nil || !strings.Contains(err.Error(), "max_tokens") {
+		t.Errorf("err = %v, want it to name max_tokens", err)
 	}
 }
