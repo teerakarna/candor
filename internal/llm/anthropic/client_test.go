@@ -202,3 +202,49 @@ func TestHypothesesSchema_OnlySupportedKeywords(t *testing.T) {
 	}
 	walk("schema", hypothesesSchema)
 }
+
+func TestEnrich_TextBlockNeedNotBeFirst(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"stop_reason":"end_turn","content":[{"type":"thinking","thinking":"..."},` +
+			`{"type":"text","text":"{\"hypotheses\":[{\"cause\":\"a\",\"confidence\":0.5,\"rationale\":\"r\",\"recommendedAction\":\"Notify\"}]}"}]}`))
+	}))
+	defer srv.Close()
+
+	c := New("test-key", WithBaseURL(srv.URL))
+	resp, err := c.Enrich(context.Background(), llm.Request{Provider: testProvider, Severity: testSeverity, Summary: "s", Kind: testKind, Name: testName})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Hypotheses) != 1 || resp.Hypotheses[0].Cause != "a" {
+		t.Errorf("hypotheses = %+v, want the one from the text block", resp.Hypotheses)
+	}
+}
+
+func TestEnrich_NoTextBlockReportsStopReason(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"stop_reason":"refusal","content":[]}`))
+	}))
+	defer srv.Close()
+
+	c := New("test-key", WithBaseURL(srv.URL))
+	_, err := c.Enrich(context.Background(), llm.Request{Provider: testProvider, Severity: testSeverity, Summary: "s", Kind: testKind, Name: testName})
+	if err == nil || !strings.Contains(err.Error(), `stop_reason "refusal"`) {
+		t.Errorf("err = %v, want it to name the stop_reason", err)
+	}
+}
+
+func TestEnrich_TruncatedAtMaxTokensSaysSo(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"stop_reason":"max_tokens","content":[{"type":"text","text":"{\"hypotheses\":[{\"cause\":\"a"}]}`))
+	}))
+	defer srv.Close()
+
+	c := New("test-key", WithBaseURL(srv.URL))
+	_, err := c.Enrich(context.Background(), llm.Request{Provider: testProvider, Severity: testSeverity, Summary: "s", Kind: testKind, Name: testName})
+	if err == nil || !strings.Contains(err.Error(), "max_tokens") {
+		t.Errorf("err = %v, want it to name max_tokens", err)
+	}
+}

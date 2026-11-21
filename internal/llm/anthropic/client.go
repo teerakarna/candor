@@ -27,7 +27,7 @@ const (
 	DefaultModel = "claude-sonnet-5"
 
 	defaultBaseURL   = "https://api.anthropic.com"
-	defaultMaxTokens = 1024
+	defaultMaxTokens = 4096
 	apiVersion       = "2023-06-01"
 )
 
@@ -135,9 +135,10 @@ type outputFormat struct {
 }
 
 type messagesResponse struct {
-	Content []contentBlock `json:"content"`
-	Usage   usage          `json:"usage"`
-	Error   *apiError      `json:"error,omitempty"`
+	Content    []contentBlock `json:"content"`
+	StopReason string         `json:"stop_reason"`
+	Usage      usage          `json:"usage"`
+	Error      *apiError      `json:"error,omitempty"`
 }
 
 // usage is the token count Anthropic reports on every non-streaming Messages response
@@ -214,12 +215,26 @@ func (c *Client) Enrich(ctx context.Context, req llm.Request) (llm.Response, err
 		return llm.Response{}, fmt.Errorf("anthropic API returned status %d", httpResp.StatusCode)
 	}
 
-	if len(resp.Content) == 0 || resp.Content[0].Type != "text" {
-		return llm.Response{}, fmt.Errorf("unexpected response shape: no text content block")
+	// The structured output is the text block, which need not be the first block in the response.
+	text, found := "", false
+	types := make([]string, 0, len(resp.Content))
+	for _, b := range resp.Content {
+		types = append(types, b.Type)
+		if b.Type == "text" && !found {
+			text, found = b.Text, true
+		}
+	}
+	if !found {
+		return llm.Response{}, fmt.Errorf("unexpected response shape: no text content block (stop_reason %q, blocks %v)", resp.StopReason, types)
+	}
+
+	// A reply cut off at max_tokens is incomplete JSON; say so rather than reporting it as malformed.
+	if resp.StopReason == "max_tokens" {
+		return llm.Response{}, fmt.Errorf("structured output truncated at max_tokens (%d)", defaultMaxTokens)
 	}
 
 	var payload2 hypothesesPayload
-	if err := json.Unmarshal([]byte(resp.Content[0].Text), &payload2); err != nil {
+	if err := json.Unmarshal([]byte(text), &payload2); err != nil {
 		return llm.Response{}, fmt.Errorf("parsing structured output: %w", err)
 	}
 
