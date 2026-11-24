@@ -486,6 +486,20 @@ budget explicitly, or it is not a solution.
     only Anthropic model choices - "which open model, if any, is good enough" becomes an answerable
     question at that point, and should be answered by this suite, not by reputation or a vendor
     benchmark.
+
+    Hosted baseline, measured 2026-11 (`claude-sonnet-5`, 8 fixtures, 3 runs each):
+
+    | Thinking | Action accuracy | Cause (informational, #155) | Errors | Output tokens per run | Time per run |
+    |---|---|---|---|---|---|
+    | model default | 96% (23 of 24) | 71% | 0 of 24 | 6751 | 1m23s |
+    | disabled | 100% (24 of 24) | 83% | 0 of 24 | 4585 | 59s |
+
+    Decision (#175): the Anthropic backend disables thinking for its default model. One answer in
+    24 is not evidence that disabling it is more accurate; the reasons are 32% fewer output tokens
+    and a baseline that does not depend on the model choosing when to think. The fixtures are short,
+    so this says little about harder findings. Any other model set through `CANDOR_LLM_MODEL` keeps
+    its own default: checked live on 2026-11-24, `claude-fable-5`, `claude-fable-5-1`,
+    `claude-fable-5-2`, `claude-opus-5-5` and `claude-sonnet-5-5` reject `disabled` with a 400.
 13. Blog article. **Done**, and more than planned: a 4-part series
     ([Building Candor](https://teerakarna.github.io/series/building-candor/)), not one post - the
     research and gaps table from this doc's own history, the operator/provider pattern and
