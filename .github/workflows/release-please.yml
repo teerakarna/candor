@@ -9,10 +9,12 @@ permissions:
 
 jobs:
   release-please:
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     permissions:
       contents: write
       pull-requests: write
-      actions: write # start release.yml on the new tag, see the last step
     runs-on: ubuntu-latest
     steps:
       # Maintains a standing PR that bumps the version and CHANGELOG.md from Conventional Commits
@@ -23,30 +25,30 @@ jobs:
       #
       # This creates the tag AND a GitHub Release (skip-github-release was tried and reverted -
       # that flag skips tag creation too, there's no release-please path that tags without also
-      # releasing). release.yml's goreleaser pipeline, started by the last step here, then completely
+      # releasing). release.yml's goreleaser pipeline, started by the job below, then completely
       # replaces this release's body with its own (release.mode: replace in .goreleaser.yaml) -
       # binaries, cosign signing, SBOM, and the verification-instructions footer this project
       # actually wants on every release, none of which release-please's own body carries.
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
 
-      # The tag above is created with GITHUB_TOKEN, and events from that token do not start other
-      # workflows, so release.yml's tag trigger never fires for it. workflow_dispatch is the
-      # documented exception. Dispatching on the tag, not main, keeps github.ref_name and the cosign
-      # certificate identity the same as for a tag push.
-      - name: Start the release build on the new tag
-        if: steps.release.outputs.release_created == 'true'
+  # The tag above is created with GITHUB_TOKEN, and events from that token do not start other
+  # workflows, so release.yml's tag trigger never fires for it. workflow_dispatch is the documented
+  # exception. Dispatching on the tag, not main, keeps github.ref_name and the cosign certificate
+  # identity the same as for a tag push.
+  #
+  # Its own job, so that only it holds actions: write, "Re-run failed jobs" can retry it (a re-run of
+  # release-please finds the release already made and reports nothing created), and it still runs
+  # when release-please fails after making the release.
+  start-release-build:
+    needs: release-please
+    if: ${{ !cancelled() && needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      actions: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start release.yml on the new tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.release.outputs.tag_name }}
-        # Re-running this job cannot retry the dispatch: the release exists by then, so
-        # release_created is no longer true and the step is skipped.
-        run: |
-          for attempt in 1 2 3 4 5; do
-            if gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"; then
-              exit 0
-            fi
-            sleep $((attempt * 5))
-          done
-          echo "::error::$TAG is released without artifacts. Run: gh workflow run release.yml --ref $TAG"
-          exit 1
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
