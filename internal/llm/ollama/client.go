@@ -117,7 +117,7 @@ var hypothesesSchema = map[string]any{
 		"hypotheses": map[string]any{
 			schemaType: "array",
 			"minItems": 1,
-			"maxItems": 3,
+			"maxItems": llm.MaxHypotheses,
 			"items": map[string]any{
 				schemaType: "object",
 				"properties": map[string]any{

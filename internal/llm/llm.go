@@ -18,13 +18,18 @@ type Request struct {
 	Name     string
 }
 
+// MaxHypotheses is how many hypotheses a Finding keeps. Backend schemas use it; their prompts still
+// say "1-3" in text, so change those too if this changes. internal/controller enforces it, since not every backend's structured output can
+// (Anthropic's rejects maxItems outright).
+const MaxHypotheses = 3
+
 // Hypothesis is one possible explanation for a Finding, with the model's own confidence in it.
 // A Response never carries a single asserted cause - only ranked hypotheses (docs/design.md
 // pillar 4) - because the evidence base this project is built on is explicit that a single
 // confident wrong answer is worse than an admittedly uncertain one.
 type Hypothesis struct {
 	Cause      string
-	Confidence float64 // 0.0-1.0
+	Confidence float64 // 0.0-1.0; a backend may return anything, internal/controller drops out-of-range entries
 	Rationale  string
 
 	// RecommendedAction is the model's suggestion for which action from Candor's fixed catalog
