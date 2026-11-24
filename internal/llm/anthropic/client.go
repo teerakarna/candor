@@ -118,6 +118,22 @@ type messagesRequest struct {
 	MaxTokens    int              `json:"max_tokens"`
 	Messages     []requestMessage `json:"messages"`
 	OutputConfig outputConfig     `json:"output_config"`
+	Thinking     *thinkingConfig  `json:"thinking,omitempty"`
+}
+
+type thinkingConfig struct {
+	Type string `json:"type"`
+}
+
+// thinkingFor turns thinking off for DefaultModel, and leaves any other model on its own default:
+// several current models answer "disabled" with a 400, so sending it to whatever CANDOR_LLM_MODEL
+// names would fail every call. Check that a new DefaultModel accepts it before changing that
+// constant. The measurement behind this is in docs/design.md, slice 12.
+func thinkingFor(model string) *thinkingConfig {
+	if model == DefaultModel {
+		return &thinkingConfig{Type: "disabled"}
+	}
+	return nil
 }
 
 type requestMessage struct {
@@ -177,6 +193,7 @@ func (c *Client) Enrich(ctx context.Context, req llm.Request) (llm.Response, err
 		OutputConfig: outputConfig{
 			Format: outputFormat{Type: "json_schema", Schema: hypothesesSchema},
 		},
+		Thinking: thinkingFor(c.model),
 	}
 
 	payload, err := json.Marshal(body)

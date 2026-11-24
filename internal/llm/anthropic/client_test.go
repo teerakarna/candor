@@ -248,3 +248,29 @@ func TestEnrich_TruncatedAtMaxTokensSaysSo(t *testing.T) {
 		t.Errorf("err = %v, want it to name max_tokens", err)
 	}
 }
+
+func TestEnrich_ThinkingDisabledOnlyForDefaultModel(t *testing.T) {
+	for _, tt := range []struct{ name, model, want string }{
+		{"default model", DefaultModel, `{"type":"disabled"}`},
+		{"any other model", "claude-opus-5-5", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var got map[string]json.RawMessage
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+					t.Error(err)
+				}
+				_, _ = w.Write([]byte(`{"content":[{"type":"text","text":"{\"hypotheses\":[]}"}]}`))
+			}))
+			defer srv.Close()
+
+			c := New("test-key", WithBaseURL(srv.URL), WithModel(tt.model))
+			if _, err := c.Enrich(context.Background(), llm.Request{Provider: testProvider, Severity: testSeverity, Summary: "s", Kind: testKind, Name: testName}); err != nil {
+				t.Fatal(err)
+			}
+			if string(got["thinking"]) != tt.want {
+				t.Errorf("thinking = %q, want %q", got["thinking"], tt.want)
+			}
+		})
+	}
+}
