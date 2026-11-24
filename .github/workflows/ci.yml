@@ -48,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # release.yml only runs goreleaser for real on a tag push, so a config mistake (a duplicate
+      # release.yml only runs goreleaser for real on a release, so a config mistake (a duplicate
       # sign id, a bad field) otherwise surfaces mid-release. `check` validates the config alone:
       # no build, no signing, no OIDC needed.
       - name: goreleaser check
