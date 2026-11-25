@@ -121,9 +121,17 @@ It maintains a standing PR that bumps the version and changelog from Conventiona
 last release - merging that PR is the release, a deliberate choice rather than something automated
 like `dependabot-automerge.yml`. Merging it creates both the git tag and a GitHub Release, but the
 release body you actually see is goreleaser's, not release-please's: `release.yml`'s pipeline,
-triggered by the tag, replaces it entirely (`release.mode: replace` in `.goreleaser.yaml`) with its
-own changelog, binaries, cosign signing, SBOM, and verification instructions - goreleaser's default
-would otherwise keep release-please's body unchanged and drop all of that silently.
+which `release-please.yml` starts on the new tag, replaces it entirely (`release.mode: replace` in
+`.goreleaser.yaml`) with its own changelog, binaries, cosign signing, SBOM, and verification
+instructions - goreleaser's default would otherwise keep release-please's body unchanged and drop
+all of that silently.
+
+If a release has no Release run at all, re-run the failed `start-release-build` job, or start the
+build with `gh workflow run release.yml --ref vX.Y.Z`. If its Release run failed partway, use
+"Re-run failed jobs" on that run: a fresh run repeats the jobs that succeeded, and pushes the
+version's image again with a new digest. The binaries job cannot replace files it already uploaded,
+so delete those from the release first. Only do any of this for the newest version, because every
+run moves `:latest`. Tags up to `v0.2.0` predate the manual start and reject it.
 
 ## On how this project is built
 

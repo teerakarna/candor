@@ -3,18 +3,41 @@ name: Release
 on:
   push:
     tags: ["v*.*.*"]
+  # Started on the tag by release-please.yml. CONTRIBUTING.md, "Releases", says when to start it by
+  # hand. Only the newest tag should be built: every run moves :latest.
+  workflow_dispatch:
 
 # Every job below declares its own least-privilege permissions already - this is a defense-in-depth
 # default so a job added later without its own block doesn't inherit the repo's default token scope.
 permissions: {}
+
+# A tag has two start paths (push and dispatch); two builds of one tag would race on its assets.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # A dispatch can name any branch or tag, and the image job would publish it as :latest.
+  check-ref:
+    name: Check the ref is a version tag
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Check ref
+        run: |
+          if [[ "$GITHUB_REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            exit 0
+          fi
+          echo "::error::$GITHUB_REF is not a version tag (vX.Y.Z), nothing was built"
+          exit 1
+
   binaries:
     name: Build binaries + GitHub Release
+    needs: check-ref
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -54,6 +77,7 @@ jobs:
 
   image:
     name: Build, sign, and attest the manager image
+    needs: check-ref
     runs-on: ubuntu-latest
     permissions:
       contents: read
