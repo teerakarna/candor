@@ -20,6 +20,9 @@ exclude = [
   # Local/dev-only URLs referenced in docs (getting-started, hack/grafana-preview README).
   '^https?://localhost',
   '^https?://127\.0\.0\.1',
+  # release-please writes the compare link for the next version into CHANGELOG.md before its tag
+  # exists, so it is a 404 until the release PR merges and would fail that PR every time.
+  '^https://github\.com/teerakarna/candor/compare/v',
 ]
 
 # Anchor/fragment checking is off by default (not configured here) - GitHub's own heading-slug
