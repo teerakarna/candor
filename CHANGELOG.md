@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/teerakarna/candor/compare/v0.2.0...v0.3.0) (2026-11-25)
+
+
+### Added
+
+* break findings down by scanner and resource kind ([#144](https://github.com/teerakarna/candor/issues/144)) ([a5fadf0](https://github.com/teerakarna/candor/commit/a5fadf016ae40c50dbf30a005322185ba2e0ce4f))
+* calmer dashboard layout, fewer panels, quieter colour ([#135](https://github.com/teerakarna/candor/issues/135)) ([5ff6743](https://github.com/teerakarna/candor/commit/5ff67430a6087e94646ce6f25273c8d23830cae7))
+* dashboard refinement pass ([#121](https://github.com/teerakarna/candor/issues/121)) ([43837a1](https://github.com/teerakarna/candor/commit/43837a1cd8a8eca1e65575e9a622ac7a9a076c4e))
+* **eval:** CANDOR_EVAL_DUMP keeps each model's answer next to its score ([#154](https://github.com/teerakarna/candor/issues/154)) ([92739e3](https://github.com/teerakarna/candor/commit/92739e35dcc6cfd80d5eb4002445d6cdc82cedb5))
+* **eval:** compare several Ollama models over repeated runs ([#139](https://github.com/teerakarna/candor/issues/139)) ([f2c1c5e](https://github.com/teerakarna/candor/commit/f2c1c5e17ef8922a701f0e31b732efff2c898ab1))
+* fix pull request table on the dashboard (candor_finding_pull_request_info) ([#136](https://github.com/teerakarna/candor/issues/136)) ([2e64702](https://github.com/teerakarna/candor/commit/2e64702bcc0801121c11c4fb34f808a2db0b777a))
+* fixture suite + scoring harness, Anthropic baseline ([#109](https://github.com/teerakarna/candor/issues/109)) ([346db57](https://github.com/teerakarna/candor/commit/346db5749b7d00d3d2ea9cf6e736832781602915))
+* PR body states the verification loop and adds fingerprint traceability ([#123](https://github.com/teerakarna/candor/issues/123)) ([adff0a9](https://github.com/teerakarna/candor/commit/adff0a917654e85f68ebff760a94865ec11f73fe))
+* record LLM token usage and show it on the dashboard ([#137](https://github.com/teerakarna/candor/issues/137)) ([afc1eb5](https://github.com/teerakarna/candor/commit/afc1eb57369843ed29919ce4181b0d269ef82a72))
+* rewrite dashboard for a non-engineer audience ([#129](https://github.com/teerakarna/candor/issues/129)) ([a6af1ee](https://github.com/teerakarna/candor/commit/a6af1ee55960ddeea81d0b95a8909da98d6eeddd))
+* run the fixture suite against Ollama candidates ([#110](https://github.com/teerakarna/candor/issues/110)) ([32ef4ba](https://github.com/teerakarna/candor/commit/32ef4ba7ab8e94c2790a3e74fbcf34adf179da04))
+* sign release binaries individually, not just via checksums.txt ([#127](https://github.com/teerakarna/candor/issues/127)) ([52b666a](https://github.com/teerakarna/candor/commit/52b666affc04fb7688b81ca6b12a9334b51bd107))
+* surface recommended action and confidence on Finding ([#122](https://github.com/teerakarna/candor/issues/122)) ([d4e6a04](https://github.com/teerakarna/candor/commit/d4e6a04898d11e896f6c42e2b1b933a912a21cc6))
+
+
+### Fixed
+
+* **ci:** skip release compare links in the link check ([#180](https://github.com/teerakarna/candor/issues/180)) ([adc767c](https://github.com/teerakarna/candor/commit/adc767c1f56c08d35ce3d384388c00f2331698ac))
+* **deps:** bump Go to 1.27.4 and golang.org/x/net to v0.63.0 ([#179](https://github.com/teerakarna/candor/issues/179)) ([7e292f2](https://github.com/teerakarna/candor/commit/7e292f2e469ae3d8291a11c093e4327148a0be71))
+* **deps:** bump golang.org/x/net to v0.60.0 to clear govulncheck ([#105](https://github.com/teerakarna/candor/issues/105)) ([eefc9d4](https://github.com/teerakarna/candor/commit/eefc9d49feab6798b1e3d2acc0b43be96b65c6a0))
+* **eval:** compare models on action accuracy, mark cause accuracy informational ([#157](https://github.com/teerakarna/candor/issues/157)) ([69fa950](https://github.com/teerakarna/candor/commit/69fa950c7fa22fde2174705220f16b96cb6c8efc))
+* **eval:** multi-run report lists the distinct error messages ([#158](https://github.com/teerakarna/candor/issues/158)) ([3900fbf](https://github.com/teerakarna/candor/commit/3900fbf67a434cafa940c0268bd401bf1a82c82b))
+* **llm:** disable thinking for the default Anthropic model ([#177](https://github.com/teerakarna/candor/issues/177)) ([b8a984d](https://github.com/teerakarna/candor/commit/b8a984d796f022b9403ab910719c0aed333fa06b))
+* **llm:** make the Anthropic backend work against the live API ([#171](https://github.com/teerakarna/candor/issues/171)) ([e38e3d4](https://github.com/teerakarna/candor/commit/e38e3d4daebc043ebef4376136638ac3b8f50967))
+* **release:** start the release build when release-please creates a tag ([#178](https://github.com/teerakarna/candor/issues/178)) ([9dacdd7](https://github.com/teerakarna/candor/commit/9dacdd7e922c581fd930e3089f7bdebd066143e3))
+* **release:** stop skip-github-release from silently dropping the tag ([#98](https://github.com/teerakarna/candor/issues/98)) ([87b0c37](https://github.com/teerakarna/candor/commit/87b0c3724c5d009f36fdae31071041d65ab1699f))
+* scope dependabot-automerge permissions to job level, enable branch-protection read for Scorecard ([#125](https://github.com/teerakarna/candor/issues/125)) ([534af93](https://github.com/teerakarna/candor/commit/534af9399bb3bcd78741503233d8706f31b91963))
+
 ## [0.2.0](https://github.com/teerakarna/candor/compare/v0.1.0...v0.2.0) (2026-09-30)
 
 
