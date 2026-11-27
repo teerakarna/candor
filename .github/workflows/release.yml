@@ -4,7 +4,7 @@ on:
   push:
     tags: ["v*.*.*"]
   # Started on the tag by release-please.yml. CONTRIBUTING.md, "Releases", says when to start it by
-  # hand. Only the newest tag should be built: every run moves :latest.
+  # hand. Only the newest tag should be built: every run of a final version moves :latest.
   workflow_dispatch:
 
 # Every job below declares its own least-privilege permissions already - this is a defense-in-depth
@@ -37,7 +37,9 @@ jobs:
 
   binaries:
     name: Build binaries + GitHub Release
-    needs: check-ref
+    # The release body and install.yaml name the image tag, which only exists once the image job
+    # has scanned, signed and tagged it.
+    needs: [check-ref, image]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -115,19 +117,34 @@ jobs:
           provenance: mode=max
           sbom: false # we generate and attest our own CycloneDX SBOM below instead
 
-      - name: Trivy image scan
+      # Trivy scans one platform of an index, the runner's unless told otherwise, so each is
+      # scanned explicitly.
+      - name: Trivy image scan (linux/amd64)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/amd64
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           format: table
           exit-code: "1"
           severity: CRITICAL,HIGH
 
+      - name: Trivy image scan (linux/arm64)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/arm64
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          skip-setup-trivy: true
+
       - name: Install cosign
         uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
 
       # Keyless signing: identity is the workflow's own OIDC token, verified against Fulcio/Rekor.
-      # No stored key. Signs the digest, so it covers both tags above without re-signing.
+      # No stored key. Signs the digest, so it covers the tags added in the last step.
       - name: Sign image (keyless)
         run: cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
 
@@ -158,6 +175,11 @@ jobs:
             tags+=(-t "$IMAGE:latest")
           fi
           docker buildx imagetools create "${tags[@]}" "$IMAGE@$DIGEST"
+          tagged=$(docker buildx imagetools inspect "$IMAGE:$GITHUB_REF_NAME" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          if [[ "$tagged" != "$DIGEST" ]]; then
+            echo "::error::$IMAGE:$GITHUB_REF_NAME is $tagged, not the signed $DIGEST"
+            exit 1
+          fi
 
   chart:
     name: Package and publish the Helm chart
