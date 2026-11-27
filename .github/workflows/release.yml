@@ -105,10 +105,9 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          # Pushed by digest only, with no tag: nothing points at it until the scan, signing and
+          # SBOM below have passed and the last step tags it.
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha
           cache-to: type=gha,mode=max
           # buildx's native SLSA-shaped provenance attestation - who built this, from what source,
@@ -146,6 +145,19 @@ jobs:
             --predicate sbom.cdx.json \
             --type cyclonedx \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+
+      # Tagging does not change the digest, so the signature and SBOM above still apply.
+      # A prerelease (vX.Y.Z-rc.1) does not move :latest.
+      - name: Tag the image
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          tags=(-t "$IMAGE:$GITHUB_REF_NAME")
+          if [[ "$GITHUB_REF_NAME" != *-* ]]; then
+            tags+=(-t "$IMAGE:latest")
+          fi
+          docker buildx imagetools create "${tags[@]}" "$IMAGE@$DIGEST"
 
   chart:
     name: Package and publish the Helm chart

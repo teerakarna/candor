@@ -131,7 +131,10 @@ build with `gh workflow run release.yml --ref vX.Y.Z`. If its Release run failed
 "Re-run failed jobs" on that run: a fresh run repeats the jobs that succeeded, and pushes the
 version's image again with a new digest. The binaries job cannot replace files it already uploaded,
 so delete those from the release first. Only do any of this for the newest version, because every
-run moves `:latest`. Tags up to `v0.2.0` predate the manual start and reject it.
+run of a final version moves `:latest`. Tags up to `v0.2.0` predate the manual start and reject it.
+
+The image is pushed by digest and only tagged after its Trivy scan, signature and SBOM attestation
+have passed. A failed run leaves an untagged image, reachable only by its digest.
 
 ## On how this project is built
 
