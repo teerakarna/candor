@@ -4,7 +4,7 @@ on:
   push:
     tags: ["v*.*.*"]
   # Started on the tag by release-please.yml. CONTRIBUTING.md, "Releases", says when to start it by
-  # hand. Only the newest tag should be built: every run moves :latest.
+  # hand. Only the newest tag should be built: every run of a final version moves :latest.
   workflow_dispatch:
 
 # Every job below declares its own least-privilege permissions already - this is a defense-in-depth
@@ -37,7 +37,9 @@ jobs:
 
   binaries:
     name: Build binaries + GitHub Release
-    needs: check-ref
+    # The release body and install.yaml name the image tag, which only exists once the image job
+    # has scanned, signed and tagged it.
+    needs: [check-ref, image]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -105,10 +107,9 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          # Pushed by digest only, with no tag: nothing points at it until the scan, signing and
+          # SBOM below have passed and the last step tags it.
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha
           cache-to: type=gha,mode=max
           # buildx's native SLSA-shaped provenance attestation - who built this, from what source,
@@ -116,21 +117,31 @@ jobs:
           provenance: mode=max
           sbom: false # we generate and attest our own CycloneDX SBOM below instead
 
-      - name: Trivy image scan
+      # Trivy scans one platform of an index, the runner's unless told otherwise, so each is
+      # scanned explicitly.
+      - name: Trivy image scan (linux/amd64)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/amd64
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           format: table
           exit-code: "1"
           severity: CRITICAL,HIGH
 
+      - name: Trivy image scan (linux/arm64)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/arm64
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          skip-setup-trivy: true
+
       - name: Install cosign
         uses: sigstore/cosign-installer@881c63bd87e38389154debd8331404ce7ca8a3ab # v4.1.4
-
-      # Keyless signing: identity is the workflow's own OIDC token, verified against Fulcio/Rekor.
-      # No stored key. Signs the digest, so it covers both tags above without re-signing.
-      - name: Sign image (keyless)
-        run: cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
 
       - name: Generate SBOM
         uses: anchore/sbom-action@dfcb83b97731532d72be422cbc51ee64adb6fd56 # v0.24.4
@@ -146,6 +157,34 @@ jobs:
             --predicate sbom.cdx.json \
             --type cyclonedx \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+
+      # Signed last, after the scans and the SBOM attestation, so a run that fails earlier does not
+      # leave a signed image that was never released.
+      # Keyless signing: identity is the workflow's own OIDC token, verified against Fulcio/Rekor.
+      # No stored key. Signs the digest, so it covers the tags added in the last step.
+      - name: Sign image (keyless)
+        run: cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+
+      # Tagging does not change the digest, so the signature and SBOM above still apply.
+      # A prerelease (vX.Y.Z-rc.1) does not move :latest.
+      - name: Tag the image
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          tags=(-t "$IMAGE:$GITHUB_REF_NAME")
+          if [[ "$GITHUB_REF_NAME" != *-* ]]; then
+            tags+=(-t "$IMAGE:latest")
+          fi
+          docker buildx imagetools create "${tags[@]}" "$IMAGE@$DIGEST"
+          for t in "${tags[@]}"; do
+            [[ "$t" == -t ]] && continue
+            tagged=$(docker buildx imagetools inspect "$t" --format '{{json .Manifest.Digest}}' | tr -d '"')
+            if [[ "$tagged" != "$DIGEST" ]]; then
+              echo "::error::$t is $tagged, not the signed $DIGEST"
+              exit 1
+            fi
+          done
 
   chart:
     name: Package and publish the Helm chart
